@@ -41,6 +41,8 @@ return [
         'is_production' => (bool) env('MIDTRANS_IS_PRODUCTION', false),
         'is_sanitized' => (bool) env('MIDTRANS_SANITIZED', true),
         'is_3ds' => (bool) env('MIDTRANS_3DS', true),
+        'verify_ssl' => filter_var(env('MIDTRANS_VERIFY_SSL', true), FILTER_VALIDATE_BOOL),
+        'ca_info' => env('MIDTRANS_CAINFO') ?: base_path('vendor/midtrans/midtrans-php/data/cacert.pem'),
     ],
 
 ];

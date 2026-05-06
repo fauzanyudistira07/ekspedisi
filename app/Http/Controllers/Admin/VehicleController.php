@@ -19,7 +19,7 @@ class VehicleController extends Controller
 
         return view('admin.vehicles.index', [
             'title' => 'Vehicles',
-            'vehicles' => Vehicle::with('courier')->latest()->paginate(10),
+            'vehicles' => Vehicle::with('courier.branch')->latest()->paginate(10),
         ]);
     }
 
@@ -29,7 +29,7 @@ class VehicleController extends Controller
 
         return view('admin.vehicles.create', [
             'title' => 'Create Vehicle',
-            'couriers' => User::where('role', User::ROLE_COURIER)->orderBy('name')->get(),
+            'couriers' => User::with('branch')->where('role', User::ROLE_COURIER)->orderBy('name')->get(),
         ]);
     }
 
@@ -58,7 +58,7 @@ class VehicleController extends Controller
         return view('admin.vehicles.edit', [
             'title' => 'Edit Vehicle',
             'vehicle' => $vehicle,
-            'couriers' => User::where('role', User::ROLE_COURIER)->orderBy('name')->get(),
+            'couriers' => User::with('branch')->where('role', User::ROLE_COURIER)->orderBy('name')->get(),
         ]);
     }
 

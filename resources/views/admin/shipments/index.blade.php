@@ -1,5 +1,10 @@
 @extends('be.master')
 @section('content')
+@php
+  $isCourierRole = Auth::user()?->role === \App\Models\User::ROLE_COURIER;
+  $trackingPermissions = config('role_feature_matrix.roles.' . (Auth::user()->role ?? '') . '.tables.shipment_trackings', []);
+  $canReadTrackings = in_array('read', $trackingPermissions, true);
+@endphp
 <div class="main-panel">
   <div class="content-wrapper">
     @include('admin.partials.alerts')
@@ -16,7 +21,9 @@
             @if (in_array('create', config('role_feature_matrix.roles.' . (Auth::user()->role ?? '') . '.tables.shipments', []), true))
               <a href="{{ route('shipments.create') }}" class="btn btn-warning text-dark">Tambah Shipment</a>
             @endif
-            <a href="{{ route('shipment-trackings.index') }}" class="btn btn-outline-light">Tracking</a>
+            @if ($canReadTrackings)
+              <a href="{{ route('shipment-trackings.index') }}" class="btn btn-outline-light">Tracking</a>
+            @endif
             <a href="{{ route('payments.index') }}" class="btn btn-outline-light">Payment</a>
           </div>
         </div>
@@ -160,7 +167,7 @@
                   <td>
                     <div class="d-flex flex-wrap" style="gap:6px;">
                       <a href="{{ route('shipments.show', $shipment) }}" class="btn btn-sm btn-info">Detail</a>
-                      <a href="{{ route('shipments.label', $shipment) }}" class="btn btn-sm btn-outline-light" target="_blank">Label</a>
+                      <a href="{{ route('shipments.label', $shipment) . ($isCourierRole ? '?preview=1' : '') }}" class="btn btn-sm btn-outline-light" target="_blank">{{ $isCourierRole ? 'Resi' : 'Label' }}</a>
                       @if (in_array('update', config('role_feature_matrix.roles.' . (Auth::user()->role ?? '') . '.tables.shipments', []), true))
                         <a href="{{ route('shipments.edit', $shipment) }}" class="btn btn-sm btn-warning">Edit</a>
                       @endif

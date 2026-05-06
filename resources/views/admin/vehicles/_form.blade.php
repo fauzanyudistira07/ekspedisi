@@ -15,7 +15,7 @@
   <select name="courier_id" class="form-control" required>
     <option value="">Pilih Courier</option>
     @foreach ($couriers as $courier)
-      <option value="{{ $courier->id }}" {{ (string) old('courier_id', $vehicle->courier_id ?? '') === (string) $courier->id ? 'selected' : '' }}>{{ $courier->name }}</option>
+      <option value="{{ $courier->id }}" {{ (string) old('courier_id', $vehicle->courier_id ?? '') === (string) $courier->id ? 'selected' : '' }}>{{ $courier->name }}{{ $courier->branch ? ' - ' . $courier->branch->name : '' }}</option>
     @endforeach
   </select>
 </div>

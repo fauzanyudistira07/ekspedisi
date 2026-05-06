@@ -14,7 +14,8 @@
                 <div class="cp-step">3. Isi multi-item</div>
                 <div class="cp-step">4. Submit order</div>
             </div>
-            <p class="cp-info-box mb-0">Gunakan Address Book untuk mempercepat input penerima. Kamu juga bisa simpan penerima baru ke address book saat submit.</p>
+            <p class="cp-info-box mb-0">Gunakan Address Book untuk mempercepat input penerima, lalu sistem akan memilih tarif dan kurir otomatis berdasarkan rute cabang.</p>
+            <div id="shipment_draft_notice" class="cp-muted-small mt-2"></div>
         </div>
     </div>
 
@@ -24,17 +25,11 @@
         <div class="cp-card mb-4">
             <div class="cp-card-header"><h3 class="cp-section-title">A. Data Penerima</h3></div>
             <div class="cp-card-body">
-                <div class="form-group">
-                    <label>Mode Penerima</label>
-                    <select name="receiver_mode" id="receiver_mode" class="custom-select" required>
-                        <option value="address" {{ old('receiver_mode', 'address') === 'address' ? 'selected' : '' }}>Pilih dari Address Book</option>
-                        <option value="new" {{ old('receiver_mode') === 'new' ? 'selected' : '' }}>Tambah Penerima Baru</option>
-                    </select>
-                </div>
+                <input type="hidden" name="receiver_mode" value="address">
 
                 <div id="receiver_address_wrap" class="form-group">
                     <label>Address Book</label>
-                    <select name="address_id" class="custom-select">
+                    <select name="address_id" class="custom-select" required>
                         <option value="">- Pilih alamat tersimpan -</option>
                         @foreach ($addressBook as $addr)
                             <option value="{{ $addr->id }}" {{ (string) old('address_id') === (string) $addr->id ? 'selected' : '' }}>
@@ -43,23 +38,6 @@
                         @endforeach
                     </select>
                     <div class="cp-muted-small mt-1">Belum punya alamat? <a href="{{ route('customer.addresses.create') }}">Tambah Address Book</a></div>
-                </div>
-
-                <div id="receiver_new_wrap">
-                    <div class="row">
-                        <div class="col-md-4 form-group"><label>Label Address Book (opsional)</label><input type="text" name="receiver_label" value="{{ old('receiver_label') }}" class="form-control" placeholder="Contoh: Rumah Orang Tua"></div>
-                        <div class="col-md-4 form-group"><label>Nama Penerima</label><input type="text" name="receiver_name" value="{{ old('receiver_name') }}" class="form-control"></div>
-                        <div class="col-md-4 form-group"><label>Email Penerima (opsional)</label><input type="email" name="receiver_email" value="{{ old('receiver_email') }}" class="form-control"></div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-7 form-group"><label>Alamat Penerima</label><input type="text" name="receiver_address" value="{{ old('receiver_address') }}" class="form-control"></div>
-                        <div class="col-md-3 form-group"><label>Kota</label><input type="text" name="receiver_city" value="{{ old('receiver_city') }}" class="form-control"></div>
-                        <div class="col-md-2 form-group"><label>Telepon</label><input type="text" name="receiver_phone" value="{{ old('receiver_phone') }}" class="form-control"></div>
-                    </div>
-                    <div class="form-group form-check">
-                        <input type="checkbox" class="form-check-input" id="save_to_address_book" name="save_to_address_book" value="1" {{ old('save_to_address_book') ? 'checked' : '' }}>
-                        <label class="form-check-label" for="save_to_address_book">Simpan penerima ini ke Address Book</label>
-                    </div>
                 </div>
             </div>
         </div>
@@ -70,7 +48,7 @@
                 <div class="row">
                     <div class="col-md-6 form-group">
                         <label>Cabang Asal</label>
-                        <select name="origin_branch_id" class="custom-select" required>
+                        <select name="origin_branch_id" id="origin_branch_id" class="custom-select" required>
                             <option value="">- Pilih cabang asal -</option>
                             @foreach ($branches as $branch)
                                 <option value="{{ $branch->id }}" {{ (string) old('origin_branch_id') === (string) $branch->id ? 'selected' : '' }}>{{ $branch->name }} ({{ $branch->city }})</option>
@@ -79,7 +57,7 @@
                     </div>
                     <div class="col-md-6 form-group">
                         <label>Cabang Tujuan</label>
-                        <select name="destination_branch_id" class="custom-select" required>
+                        <select name="destination_branch_id" id="destination_branch_id" class="custom-select" required>
                             <option value="">- Pilih cabang tujuan -</option>
                             @foreach ($branches as $branch)
                                 <option value="{{ $branch->id }}" {{ (string) old('destination_branch_id') === (string) $branch->id ? 'selected' : '' }}>{{ $branch->name }} ({{ $branch->city }})</option>
@@ -87,27 +65,39 @@
                         </select>
                     </div>
                 </div>
+                <div class="form-group mb-2">
+                    <button type="button" id="unlock_route_btn" class="btn btn-sm btn-outline-secondary" style="display:none;">Ubah Cabang</button>
+                </div>
+                <input type="hidden" id="origin_branch_hidden" value="">
+                <input type="hidden" id="destination_branch_hidden" value="">
 
                 <div class="row">
                     <div class="col-md-6 form-group">
                         <label>Rate Ongkir</label>
-                        <select name="rate_id" id="rate_id" class="custom-select" required>
-                            <option value="">- Pilih rate -</option>
-                            @foreach ($rates as $rate)
-                                <option value="{{ $rate->id }}" data-price="{{ $rate->price_per_kg }}" data-days="{{ $rate->estimated_days }}" {{ (string) old('rate_id') === (string) $rate->id ? 'selected' : '' }}>
-                                    {{ $rate->origin_city }} -> {{ $rate->destination_city }} (Rp {{ number_format($rate->price_per_kg, 0, ',', '.') }}/kg, {{ $rate->estimated_days }} hari)
-                                </option>
-                            @endforeach
-                        </select>
+                        <input type="hidden" name="rate_id" id="rate_id" value="{{ old('rate_id') }}">
+                        <input type="text" id="rate_preview" class="form-control" value="" placeholder="Otomatis dari rute cabang" readonly>
+                        <div class="cp-muted-small mt-1" id="rate_helper">Pilih cabang asal dan tujuan untuk menghitung ongkir otomatis.</div>
                     </div>
                     <div class="col-md-6 form-group">
                         <label>Kurir</label>
-                        <select name="courier_id" class="custom-select" required>
-                            <option value="">- Pilih kurir -</option>
-                            @foreach ($couriers as $courier)
-                                <option value="{{ $courier->id }}" {{ (string) old('courier_id') === (string) $courier->id ? 'selected' : '' }}>{{ $courier->name }}</option>
-                            @endforeach
-                        </select>
+                        <input type="hidden" name="courier_id" id="courier_id" value="{{ old('courier_id') }}">
+                        <input type="text" id="courier_preview" class="form-control" value="" placeholder="Otomatis dari cabang asal" readonly>
+                        <div class="cp-muted-small mt-1">Courier pickup dipilih otomatis sesuai cabang asal.</div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 form-group">
+                        <label>Total Berat</label>
+                        <input type="text" id="total_weight_preview" class="form-control" value="" placeholder="Otomatis dari item" readonly>
+                    </div>
+                    <div class="col-md-4 form-group">
+                        <label>Total Ongkir</label>
+                        <input type="text" id="total_price_preview" class="form-control" value="" placeholder="Otomatis dari berat dan rute" readonly>
+                    </div>
+                    <div class="col-md-4 form-group">
+                        <label>Estimasi Tiba</label>
+                        <input type="text" id="estimated_days_preview" class="form-control" value="" placeholder="Otomatis dari rate" readonly>
                     </div>
                 </div>
 
@@ -140,18 +130,183 @@
 @push('scripts')
 <script>
 (function () {
-    const modeSelect = document.getElementById('receiver_mode');
-    const addressWrap = document.getElementById('receiver_address_wrap');
-    const newWrap = document.getElementById('receiver_new_wrap');
+    const routeOptions = @json($routeOptions);
+    const couriersByBranch = @json($couriersByBranch);
+    const hasServerOldInput = @json(!empty(session()->getOldInput()));
+    const draftStorageKey = 'customer-shipment-draft:{{ Auth::guard('customer')->id() }}';
+
+    const shipmentForm = document.querySelector('form.cp-form');
+    const addressInput = shipmentForm.querySelector('select[name="address_id"]');
+    const shipmentDateInput = shipmentForm.querySelector('input[name="shipment_date"]');
+    const draftNotice = document.getElementById('shipment_draft_notice');
+    const originInput = document.getElementById('origin_branch_id');
+    const destinationInput = document.getElementById('destination_branch_id');
+    const originHidden = document.getElementById('origin_branch_hidden');
+    const destinationHidden = document.getElementById('destination_branch_hidden');
+    const unlockRouteBtn = document.getElementById('unlock_route_btn');
+
     const rateInput = document.getElementById('rate_id');
+    const ratePreview = document.getElementById('rate_preview');
+    const rateHelper = document.getElementById('rate_helper');
+    const courierInput = document.getElementById('courier_id');
+    const courierPreview = document.getElementById('courier_preview');
+    const totalWeightPreview = document.getElementById('total_weight_preview');
+    const totalPricePreview = document.getElementById('total_price_preview');
+    const estimatedDaysPreview = document.getElementById('estimated_days_preview');
     const addItemBtn = document.getElementById('add_item_row');
     const itemsWrapper = document.getElementById('items_wrapper');
     const costPreview = document.getElementById('cost_preview');
+    let activeRoute = null;
+    let isSubmitting = false;
 
-    function toggleReceiverFields() {
-        const mode = modeSelect.value;
-        addressWrap.style.display = mode === 'address' ? '' : 'none';
-        newWrap.style.display = mode === 'new' ? '' : 'none';
+    function setDraftNotice(message) {
+        draftNotice.textContent = message || '';
+    }
+
+    function loadDraft() {
+        if (hasServerOldInput) {
+            return null;
+        }
+
+        try {
+            const stored = window.localStorage.getItem(draftStorageKey);
+            return stored ? JSON.parse(stored) : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function saveDraft() {
+        const draft = {
+            address_id: addressInput.value || '',
+            origin_branch_id: originInput.value || '',
+            destination_branch_id: destinationInput.value || '',
+            shipment_date: shipmentDateInput.value || '',
+            items: Array.from(itemsWrapper.querySelectorAll('.item-row')).map((row) => ({
+                name: row.querySelector('input[name="item_name[]"]').value || '',
+                qty: row.querySelector('input[name="quantity[]"]').value || 1,
+                weight: row.querySelector('input[name="weight[]"]').value || 1,
+            })),
+        };
+
+        window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+        setDraftNotice('Draft shipment tersimpan sementara di browser ini.');
+    }
+
+    function clearDraft() {
+        window.localStorage.removeItem(draftStorageKey);
+        setDraftNotice('');
+    }
+
+    function restoreDraftValue(input, value) {
+        if (!input || value === undefined || value === null || value === '') {
+            return;
+        }
+
+        const optionExists = Array.from(input.options || []).some((option) => option.value === String(value));
+        if (!optionExists && input.tagName === 'SELECT') {
+            return;
+        }
+
+        input.value = String(value);
+    }
+
+    function getRouteKey() {
+        if (!originInput.value || !destinationInput.value) {
+            return null;
+        }
+        return originInput.value + '-' + destinationInput.value;
+    }
+
+    function syncBranchOptions() {
+        if (originInput.value && destinationInput.value && originInput.value === destinationInput.value) {
+            destinationInput.value = '';
+        }
+
+        const activeOrigin = originInput.value;
+        const activeDestination = destinationInput.value;
+
+        Array.from(originInput.options).forEach((option) => {
+            option.disabled = option.value !== '' && option.value === activeDestination;
+        });
+
+        Array.from(destinationInput.options).forEach((option) => {
+            option.disabled = option.value !== '' && option.value === activeOrigin;
+        });
+    }
+
+    function clearAutoFields(message) {
+        activeRoute = null;
+        rateInput.value = '';
+        courierInput.value = '';
+        ratePreview.value = '';
+        courierPreview.value = '';
+        totalWeightPreview.value = '';
+        totalPricePreview.value = '';
+        estimatedDaysPreview.value = '';
+        rateHelper.textContent = message || 'Pilih cabang asal dan tujuan untuk menghitung ongkir otomatis.';
+        updatePreview();
+    }
+
+    function lockRouteSelection() {
+        originInput.disabled = true;
+        destinationInput.disabled = true;
+        originHidden.name = 'origin_branch_id';
+        destinationHidden.name = 'destination_branch_id';
+        originHidden.value = originInput.value;
+        destinationHidden.value = destinationInput.value;
+        unlockRouteBtn.style.display = '';
+    }
+
+    function unlockRouteSelection() {
+        originInput.disabled = false;
+        destinationInput.disabled = false;
+        originHidden.name = '';
+        destinationHidden.name = '';
+        originHidden.value = '';
+        destinationHidden.value = '';
+        unlockRouteBtn.style.display = 'none';
+    }
+
+    function syncAutoRouteAndCourier(lockWhenValid) {
+        const originValue = originInput.value;
+        const destinationValue = destinationInput.value;
+
+        if (!originValue || !destinationValue) {
+            clearAutoFields('Pilih cabang asal dan tujuan untuk menghitung ongkir otomatis.');
+            return;
+        }
+
+        if (originValue === destinationValue) {
+            clearAutoFields('Cabang asal dan tujuan tidak boleh sama.');
+            return;
+        }
+
+        const route = routeOptions[getRouteKey()];
+        if (!route) {
+            clearAutoFields('Rute cabang ini belum punya tarif ongkir.');
+            return;
+        }
+
+        const branchCouriers = couriersByBranch[originValue] || [];
+        if (!branchCouriers.length) {
+            clearAutoFields('Belum ada kurir yang terdaftar di cabang asal.');
+            return;
+        }
+
+        const courier = branchCouriers[0];
+        activeRoute = route;
+        rateInput.value = String(route.rate_id);
+        courierInput.value = String(courier.id);
+        ratePreview.value = 'Rp ' + Number(route.price_per_kg).toLocaleString('id-ID') + '/kg | Estimasi ' + route.estimated_days + ' hari';
+        courierPreview.value = courier.name;
+        rateHelper.textContent = route.origin_city + ' -> ' + route.destination_city;
+
+        if (lockWhenValid) {
+            lockRouteSelection();
+        }
+
+        updatePreview();
     }
 
     function formatRupiah(value) {
@@ -197,12 +352,14 @@
     }
 
     function updatePreview() {
-        const selected = rateInput.options[rateInput.selectedIndex];
-        const pricePerKg = selected ? parseFloat(selected.dataset.price || 0) : 0;
-        const days = selected ? selected.dataset.days : '-';
+        const pricePerKg = activeRoute ? parseFloat(activeRoute.price_per_kg || 0) : 0;
+        const days = activeRoute ? activeRoute.estimated_days : '-';
         const items = collectItems();
 
         if (!items.length || !pricePerKg) {
+            totalWeightPreview.value = items.length ? items.reduce((sum, item) => sum + (item.qty * item.weight), 0).toFixed(2) + ' kg' : '';
+            totalPricePreview.value = '';
+            estimatedDaysPreview.value = activeRoute ? activeRoute.estimated_days + ' hari' : '';
             costPreview.textContent = 'Estimasi berat total dan ongkir akan tampil otomatis.';
             return;
         }
@@ -210,6 +367,9 @@
         const totalWeight = items.reduce((sum, item) => sum + (item.qty * item.weight), 0);
         const estimate = totalWeight * pricePerKg;
 
+        totalWeightPreview.value = totalWeight.toFixed(2) + ' kg';
+        totalPricePreview.value = formatRupiah(estimate);
+        estimatedDaysPreview.value = days + ' hari';
         costPreview.innerHTML = 'Total item: <strong>' + items.length + '</strong> | Total berat: <strong>' + totalWeight.toFixed(2) + ' kg</strong> | Estimasi ongkir: <strong>' + formatRupiah(estimate) + '</strong> | Estimasi tiba: <strong>' + days + ' hari</strong>';
     }
 
@@ -220,11 +380,17 @@
             }
             row.remove();
             updatePreview();
+            saveDraft();
         });
 
         row.querySelectorAll('.item-qty, .item-weight').forEach((input) => {
-            input.addEventListener('input', updatePreview);
+            input.addEventListener('input', function () {
+                updatePreview();
+                saveDraft();
+            });
         });
+
+        row.querySelector('input[name="item_name[]"]').addEventListener('input', saveDraft);
     }
 
     let itemIndex = 0;
@@ -236,15 +402,70 @@
 
     addItemBtn.addEventListener('click', function () {
         addRow({ qty: 1, weight: 1 });
+        saveDraft();
     });
 
-    modeSelect.addEventListener('change', toggleReceiverFields);
-    rateInput.addEventListener('change', updatePreview);
+    originInput.addEventListener('change', function () {
+        unlockRouteSelection();
+        syncBranchOptions();
+        syncAutoRouteAndCourier(true);
+    });
+    destinationInput.addEventListener('change', function () {
+        unlockRouteSelection();
+        syncBranchOptions();
+        syncAutoRouteAndCourier(true);
+    });
+    unlockRouteBtn.addEventListener('click', function () {
+        unlockRouteSelection();
+        syncBranchOptions();
+        clearAutoFields('Silakan ubah cabang asal/tujuan, lalu tarif dan kurir akan dipilih otomatis lagi.');
+        saveDraft();
+    });
+
+    shipmentForm.addEventListener('input', function (event) {
+        if (event.target.type === 'file') {
+            return;
+        }
+
+        saveDraft();
+    });
+
+    shipmentForm.addEventListener('change', function (event) {
+        if (event.target.type === 'file') {
+            return;
+        }
+
+        saveDraft();
+    });
+
+    shipmentForm.addEventListener('submit', function () {
+        isSubmitting = true;
+        clearDraft();
+    });
+
+    window.addEventListener('beforeunload', function () {
+        if (isSubmitting) {
+            return;
+        }
+
+        saveDraft();
+    });
 
     const oldNames = @json(old('item_name', []));
     const oldQty = @json(old('quantity', []));
     const oldWeight = @json(old('weight', []));
     const hasOldRows = Array.isArray(oldNames) && oldNames.length > 0;
+    const savedDraft = loadDraft();
+
+    if (savedDraft) {
+        restoreDraftValue(addressInput, savedDraft.address_id);
+        restoreDraftValue(originInput, savedDraft.origin_branch_id);
+        restoreDraftValue(destinationInput, savedDraft.destination_branch_id);
+        if (savedDraft.shipment_date) {
+            shipmentDateInput.value = savedDraft.shipment_date;
+        }
+        setDraftNotice('Draft shipment sebelumnya dipulihkan otomatis.');
+    }
 
     if (hasOldRows) {
         oldNames.forEach((name, idx) => {
@@ -254,11 +475,30 @@
                 weight: oldWeight[idx] || 1
             });
         });
+    } else if (savedDraft && Array.isArray(savedDraft.items) && savedDraft.items.length > 0) {
+        savedDraft.items.forEach((item) => {
+            addRow({
+                name: item.name || '',
+                qty: item.qty || 1,
+                weight: item.weight || 1
+            });
+        });
     } else {
         addRow({ qty: 1, weight: 1 });
     }
 
-    toggleReceiverFields();
+    if (originInput.value && destinationInput.value) {
+        syncBranchOptions();
+        syncAutoRouteAndCourier(true);
+    } else {
+        syncBranchOptions();
+        clearAutoFields();
+    }
+
+    if (!hasServerOldInput && !savedDraft) {
+        setDraftNotice('Draft shipment akan tersimpan sementara jika Anda pindah halaman.');
+    }
+
 })();
 </script>
 @endpush

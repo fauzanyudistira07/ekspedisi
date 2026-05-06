@@ -1,5 +1,9 @@
 <div class="main-panel">
   <div class="content-wrapper">
+    @php
+      $trackingPermissions = config('role_feature_matrix.roles.' . ($currentRole ?? '') . '.tables.shipment_trackings', []);
+      $canReadTrackings = in_array('read', $trackingPermissions, true);
+    @endphp
     @include('admin.partials.alerts')
 
     <div class="card mb-4 border-0 shadow-sm dashboard-hero">
@@ -117,11 +121,11 @@
                   @if ($currentRole === \App\Models\User::ROLE_COURIER)
                     <div class="mt-2 d-flex justify-content-between"><span>Tracking hari ini</span><strong>{{ number_format($stats['trackings_today']) }}</strong></div>
                     <div class="mt-2 d-flex justify-content-between"><span>Shipment aktif</span><strong>{{ number_format($stats['shipments_in_transit']) }}</strong></div>
-                    <div class="mt-2 d-flex justify-content-between"><span>Paid hari ini</span><strong>Rp {{ number_format((float) $stats['payments_paid_today'], 0, ',', '.') }}</strong></div>
+                    <div class="mt-2 d-flex justify-content-between"><span>Uang masuk</span><strong>Rp {{ number_format((float) $stats['payments_paid_today'], 0, ',', '.') }}</strong></div>
                   @else
                   <div class="mt-2 d-flex justify-content-between"><span>Pending</span><strong>{{ number_format($stats['payments_waiting']) }}</strong></div>
                   <div class="mt-2 d-flex justify-content-between"><span>Failed</span><strong>{{ number_format($stats['payments_failed']) }}</strong></div>
-                  <div class="mt-2 d-flex justify-content-between"><span>Paid hari ini</span><strong>Rp {{ number_format((float) $stats['payments_paid_today'], 0, ',', '.') }}</strong></div>
+                  <div class="mt-2 d-flex justify-content-between"><span>Uang masuk</span><strong>Rp {{ number_format((float) $stats['payments_paid_today'], 0, ',', '.') }}</strong></div>
                   @endif
                 </div>
               </div>
@@ -220,7 +224,7 @@
       </div>
     </div>
 
-    @if ($currentRole !== \App\Models\User::ROLE_COURIER)
+    @if ($currentRole !== \App\Models\User::ROLE_COURIER && $canReadTrackings)
     <div class="row">
       <div class="col-12 grid-margin stretch-card">
         <div class="card shadow-sm border-0 dashboard-section-card">

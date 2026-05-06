@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Concerns\AuthorizesRoleTableAccess;
 use App\Http\Controllers\Controller;
+use App\Models\Payment;
 use App\Models\Shipment;
 use App\Models\ShipmentTracking;
 use App\Support\Uploads;
@@ -27,6 +28,7 @@ class ShipmentTrackingController extends Controller
         $status = request('status');
 
         $trackings = ShipmentTracking::with('shipment')
+            ->whereHas('shipment.payment', fn ($query) => $query->where('payment_status', Payment::STATUS_PAID))
             ->when($user->role === User::ROLE_COURIER, function ($query) use ($user) {
                 $query->whereHas('shipment', function ($subQuery) use ($user) {
                     $subQuery->where('courier_id', $user->id);
@@ -44,6 +46,7 @@ class ShipmentTrackingController extends Controller
             ->withQueryString();
 
         $summaryBaseQuery = ShipmentTracking::query()
+            ->whereHas('shipment.payment', fn ($query) => $query->where('payment_status', Payment::STATUS_PAID))
             ->when($user->role === User::ROLE_COURIER, function ($query) use ($user) {
                 $query->whereHas('shipment', function ($subQuery) use ($user) {
                     $subQuery->where('courier_id', $user->id);
@@ -81,12 +84,13 @@ class ShipmentTrackingController extends Controller
         if ($request->filled('shipment_id')) {
             $selectedShipment = Shipment::findOrFail((int) $request->input('shipment_id'));
             $this->ensureShipmentVisibility($selectedShipment);
+            $this->ensureShipmentPaid($selectedShipment);
         }
 
         return view('admin.shipment_trackings.create', [
             'title' => 'Create Shipment Tracking',
             'shipments' => $this->visibleShipments(),
-            'statuses' => ShipmentTracking::statuses(),
+            'statuses' => $this->trackingStatusesForCurrentUser($selectedShipment),
             'selectedShipment' => $selectedShipment,
             'selectedStatus' => $selectedStatus,
         ]);
@@ -110,6 +114,7 @@ class ShipmentTrackingController extends Controller
 
         $shipment = Shipment::findOrFail($validated['shipment_id']);
         $this->ensureShipmentVisibility($shipment);
+        $this->ensureShipmentPaid($shipment);
         $this->validateStatusTransition($shipment, $validated['status']);
         $this->applyDeliveryProofValidation($request, $validated);
 
@@ -121,6 +126,7 @@ class ShipmentTrackingController extends Controller
             $tracking = ShipmentTracking::create($validated);
             $shipment->update([
                 'status' => $validated['status'],
+                'courier_id' => $this->resolveResponsibleCourierId($shipment, $validated['status']),
                 'exception_code' => $this->resolveExceptionCode($validated['status']),
                 'exception_notes' => $this->resolveExceptionNotes($validated),
                 'last_exception_at' => $this->resolveExceptionCode($validated['status']) ? now() : $shipment->last_exception_at,
@@ -151,7 +157,7 @@ class ShipmentTrackingController extends Controller
             'title' => 'Edit Shipment Tracking',
             'shipmentTracking' => $shipmentTracking,
             'shipments' => $this->visibleShipments(),
-            'statuses' => ShipmentTracking::statuses(),
+            'statuses' => $this->trackingStatusesForCurrentUser($shipmentTracking->shipment, $shipmentTracking->status),
             'selectedShipment' => $shipmentTracking->shipment,
             'selectedStatus' => $shipmentTracking->status,
         ]);
@@ -176,6 +182,7 @@ class ShipmentTrackingController extends Controller
 
         $shipment = Shipment::findOrFail($validated['shipment_id']);
         $this->ensureShipmentVisibility($shipment);
+        $this->ensureShipmentPaid($shipment);
         $this->validateStatusTransition($shipment, $validated['status'], $shipmentTracking->id);
         $this->applyDeliveryProofValidation($request, $validated, $shipmentTracking->proof_photo);
 
@@ -197,6 +204,7 @@ class ShipmentTrackingController extends Controller
             if ($latestStatus) {
                 $shipment->update([
                     'status' => $latestStatus,
+                    'courier_id' => $this->resolveResponsibleCourierId($shipment, $latestStatus),
                     'exception_code' => $this->resolveExceptionCode($latestStatus),
                     'exception_notes' => $this->resolveExceptionNotes($validated),
                     'last_exception_at' => $this->resolveExceptionCode($latestStatus) ? now() : $shipment->last_exception_at,
@@ -234,6 +242,7 @@ class ShipmentTrackingController extends Controller
 
             Shipment::where('id', $shipmentId)->update([
                 'status' => $latestStatus ?? Shipment::STATUS_PENDING,
+                'courier_id' => $this->resolveResponsibleCourierId($shipment ?? Shipment::findOrFail($shipmentId), $latestStatus ?? Shipment::STATUS_PENDING),
                 'exception_code' => in_array($latestStatus, [
                     ShipmentTracking::STATUS_FAILED_DELIVERY,
                     ShipmentTracking::STATUS_EXCEPTION_HOLD,
@@ -255,7 +264,10 @@ class ShipmentTrackingController extends Controller
 
         return Shipment::when($user->role === User::ROLE_COURIER, function ($query) use ($user) {
             $query->where('courier_id', $user->id);
-        })->orderBy('tracking_number')->get();
+        })
+            ->whereHas('payment', fn ($query) => $query->where('payment_status', Payment::STATUS_PAID))
+            ->orderBy('tracking_number')
+            ->get();
     }
 
     private function ensureShipmentVisibility(Shipment $shipment): void
@@ -264,6 +276,16 @@ class ShipmentTrackingController extends Controller
 
         if ($user && $user->role === User::ROLE_COURIER && $shipment->courier_id !== $user->id) {
             abort(403, 'Anda tidak memiliki akses ke shipment ini.');
+        }
+    }
+
+    private function ensureShipmentPaid(Shipment $shipment): void
+    {
+        $shipment->loadMissing('payment');
+        if (!$shipment->payment || $shipment->payment->payment_status !== Payment::STATUS_PAID) {
+            throw ValidationException::withMessages([
+                'shipment_id' => 'Shipment belum lunas sehingga belum bisa diproses tracking pengiriman.',
+            ]);
         }
     }
 
@@ -276,7 +298,12 @@ class ShipmentTrackingController extends Controller
             ->value('status');
 
         $baseStatus = $latestTrackingStatus ?: $shipment->status;
-        $allowedStatuses = Shipment::nextTrackingStatuses($baseStatus);
+        if (Auth::user()?->role === User::ROLE_COURIER) {
+            $shipment->loadMissing('trackings');
+            $allowedStatuses = $shipment->nextCourierTaskStatuses();
+        } else {
+            $allowedStatuses = Shipment::nextTrackingStatuses($baseStatus);
+        }
 
         if (!in_array($status, $allowedStatuses, true)) {
             throw ValidationException::withMessages([
@@ -287,22 +314,53 @@ class ShipmentTrackingController extends Controller
 
     private function applyDeliveryProofValidation(Request $request, array &$validated, ?string $existingProof = null): void
     {
-        if ($validated['status'] !== ShipmentTracking::STATUS_DELIVERED) {
+        $isCourierProof = Auth::user()?->role === User::ROLE_COURIER
+            && Shipment::courierTaskRequiresProof($validated['status']);
+
+        if (!$isCourierProof && $validated['status'] !== ShipmentTracking::STATUS_DELIVERED) {
             $validated['received_by'] = null;
             $validated['receiver_relation'] = null;
             return;
         }
 
-        validator($request->all(), [
-            'received_by' => 'required|string|max:100',
-            'receiver_relation' => 'nullable|string|max:50',
-        ])->validate();
+        if (!$isCourierProof) {
+            validator($request->all(), [
+                'received_by' => 'required|string|max:100',
+                'receiver_relation' => 'nullable|string|max:50',
+            ])->validate();
+        } else {
+            $validated['received_by'] = null;
+            $validated['receiver_relation'] = null;
+        }
 
         if (!$request->hasFile('proof_photo') && empty($existingProof)) {
             throw ValidationException::withMessages([
-                'proof_photo' => 'Foto bukti serah terima wajib diunggah untuk status paket sudah sampai ke rumah penerima.',
+                'proof_photo' => $isCourierProof
+                    ? ($validated['status'] === ShipmentTracking::STATUS_PICKED_UP
+                        ? 'Foto bukti pickup wajib diunggah untuk status sudah dipickup.'
+                        : 'Foto bukti pengantaran wajib diunggah untuk status sampai di tujuan.')
+                    : 'Foto bukti serah terima wajib diunggah untuk status paket sudah sampai ke rumah penerima.',
             ]);
         }
+    }
+
+    private function trackingStatusesForCurrentUser(?Shipment $shipment = null, ?string $currentStatus = null): array
+    {
+        if (Auth::user()?->role !== User::ROLE_COURIER) {
+            return ShipmentTracking::statuses();
+        }
+
+        if (!$shipment) {
+            return ShipmentTracking::statuses();
+        }
+
+        $statuses = $shipment->nextCourierTaskStatuses();
+
+        if ($currentStatus && in_array($currentStatus, ShipmentTracking::statuses(), true) && !in_array($currentStatus, $statuses, true)) {
+            array_unshift($statuses, $currentStatus);
+        }
+
+        return array_values(array_unique($statuses));
     }
 
     private function resolveExceptionCode(string $status): ?string
@@ -317,5 +375,35 @@ class ShipmentTrackingController extends Controller
     private function resolveExceptionNotes(array $validated): ?string
     {
         return $this->resolveExceptionCode($validated['status'] ?? '') ? ($validated['description'] ?? null) : null;
+    }
+
+    private function resolveResponsibleCourierId(Shipment $shipment, string $status): int
+    {
+        if (in_array($status, [
+            ShipmentTracking::STATUS_EXCEPTION_HOLD,
+            ShipmentTracking::STATUS_FAILED_DELIVERY,
+            ShipmentTracking::STATUS_RETURNED_TO_SENDER,
+        ], true)) {
+            return (int) $shipment->courier_id;
+        }
+
+        $shipment->unsetRelation('trackings');
+        $responsibleCourier = $shipment->resolveResponsibleCourierForStatus($status);
+
+        if ($responsibleCourier) {
+            return (int) $responsibleCourier->id;
+        }
+
+        throw ValidationException::withMessages([
+            'status' => match ($status) {
+                ShipmentTracking::STATUS_PENDING => 'Belum ada courier pickup aktif di cabang asal.',
+                ShipmentTracking::STATUS_PICKED_UP,
+                ShipmentTracking::STATUS_IN_TRANSIT => 'Belum ada courier HTH aktif di cabang asal.',
+                ShipmentTracking::STATUS_ARRIVED_AT_BRANCH,
+                ShipmentTracking::STATUS_OUT_FOR_DELIVERY,
+                ShipmentTracking::STATUS_DELIVERED => 'Belum ada courier drop aktif di cabang tujuan.',
+                default => 'Belum ada courier yang sesuai untuk status ini.',
+            },
+        ]);
     }
 }

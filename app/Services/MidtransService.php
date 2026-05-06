@@ -6,6 +6,7 @@ use App\Models\Payment;
 use App\Models\Shipment;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 use Midtrans\Config;
 use Midtrans\Notification;
 use Midtrans\Snap;
@@ -20,6 +21,7 @@ class MidtransService
         Config::$isProduction = (bool) config('services.midtrans.is_production', false);
         Config::$isSanitized = (bool) config('services.midtrans.is_sanitized', true);
         Config::$is3ds = (bool) config('services.midtrans.is_3ds', true);
+        Config::$curlOptions = $this->buildCurlOptions();
     }
 
     public function createOrRefreshSnapTransaction(Payment $payment): array
@@ -158,5 +160,35 @@ class MidtransService
     public function generateGatewayOrderId(Shipment $shipment): string
     {
         return 'EXP-' . $shipment->tracking_number . '-' . now()->format('YmdHis');
+    }
+
+    private function buildCurlOptions(): array
+    {
+        $verifySsl = (bool) config('services.midtrans.verify_ssl', true);
+        $caInfo = (string) config('services.midtrans.ca_info', '');
+
+        if (!$verifySsl) {
+            return [
+                CURLOPT_HTTPHEADER => [],
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 0,
+            ];
+        }
+
+        $curlOptions = [
+            CURLOPT_HTTPHEADER => [],
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+        ];
+
+        if ($caInfo !== '') {
+            if (!is_file($caInfo)) {
+                throw new RuntimeException('MIDTRANS_CAINFO tidak ditemukan: ' . $caInfo);
+            }
+
+            $curlOptions[CURLOPT_CAINFO] = $caInfo;
+        }
+
+        return $curlOptions;
     }
 }

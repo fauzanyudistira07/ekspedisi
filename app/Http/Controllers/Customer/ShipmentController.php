@@ -17,7 +17,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Validation\Rule;
 
 class ShipmentController extends Controller
 {
@@ -57,11 +56,69 @@ class ShipmentController extends Controller
 
     public function create()
     {
+        $branches = Branch::orderBy('name')->get();
+        $rates = Rate::orderBy('origin_city')
+            ->orderBy('destination_city')
+            ->orderBy('price_per_kg')
+            ->get();
+        $couriers = User::where('role', User::ROLE_COURIER)
+            ->whereNotNull('branch_id')
+            ->orderBy('name')
+            ->get();
+
+        $rateByCityRoute = [];
+        foreach ($rates as $rate) {
+            $cityKey = $this->cityRouteKey($rate->origin_city, $rate->destination_city);
+            if (!isset($rateByCityRoute[$cityKey])) {
+                $rateByCityRoute[$cityKey] = $rate;
+            }
+        }
+
+        $routeOptions = [];
+        foreach ($branches as $originBranch) {
+            foreach ($branches as $destinationBranch) {
+                if ((int) $originBranch->id === (int) $destinationBranch->id) {
+                    continue;
+                }
+
+                $cityKey = $this->cityRouteKey($originBranch->city, $destinationBranch->city);
+                if (!isset($rateByCityRoute[$cityKey])) {
+                    continue;
+                }
+
+                $rate = $rateByCityRoute[$cityKey];
+                $routeOptions[$originBranch->id . '-' . $destinationBranch->id] = [
+                    'rate_id' => (int) $rate->id,
+                    'price_per_kg' => (float) $rate->price_per_kg,
+                    'estimated_days' => (int) $rate->estimated_days,
+                    'origin_city' => (string) $rate->origin_city,
+                    'destination_city' => (string) $rate->destination_city,
+                ];
+            }
+        }
+
+        $couriersByBranch = $couriers
+            ->groupBy('branch_id')
+            ->map(function ($rows) {
+                $pickupCourier = $rows->first(fn ($courier) => $courier->isCourierTaskType(User::COURIER_TASK_PICKUP))
+                    ?? $rows->first(fn ($courier) => $courier->courierTaskType() === null);
+
+                if (!$pickupCourier) {
+                    return [];
+                }
+
+                return [[
+                    'id' => (int) $pickupCourier->id,
+                    'name' => (string) $pickupCourier->name,
+                ]];
+            })
+            ->toArray();
+
         return view('customer.shipments.create', [
             'title' => 'Create Shipment',
-            'branches' => Branch::orderBy('name')->get(),
-            'rates' => Rate::orderBy('origin_city')->orderBy('destination_city')->get(),
-            'couriers' => User::where('role', User::ROLE_COURIER)->orderBy('name')->get(),
+            'branches' => $branches,
+            'routeOptions' => $routeOptions,
+            'couriersByBranch' => $couriersByBranch,
             'addressBook' => CustomerAddress::where('customer_id', Auth::guard('customer')->id())
                 ->orderByDesc('is_default')
                 ->orderBy('label')
@@ -85,12 +142,6 @@ class ShipmentController extends Controller
             'receiver_phone' => 'nullable|string|max:15',
             'origin_branch_id' => 'required|exists:branches,id',
             'destination_branch_id' => 'required|exists:branches,id',
-            'rate_id' => 'required|exists:rates,id',
-            'courier_id' => [
-                'required',
-                'exists:users,id',
-                Rule::exists('users', 'id')->where(fn ($query) => $query->where('role', User::ROLE_COURIER)),
-            ],
             'shipment_date' => 'required|date',
             'item_name' => 'required|array|min:1',
             'item_name.*' => 'required|string|max:255',
@@ -160,16 +211,20 @@ class ShipmentController extends Controller
             foreach ($validated['item_name'] as $idx => $name) {
                 $totalWeight += ((float) $validated['quantity'][$idx] * (float) $validated['weight'][$idx]);
             }
-            $rate = Rate::findOrFail($validated['rate_id']);
             $originBranch = Branch::findOrFail($validated['origin_branch_id']);
             $destinationBranch = Branch::findOrFail($validated['destination_branch_id']);
+            $rate = $this->resolveRateForBranchRoute($originBranch, $destinationBranch);
+            $courier = $this->resolveCourierForBranch((int) $originBranch->id);
 
-            if (
-                strcasecmp((string) $originBranch->city, (string) $rate->origin_city) !== 0 ||
-                strcasecmp((string) $destinationBranch->city, (string) $rate->destination_city) !== 0
-            ) {
+            if (!$rate) {
                 throw ValidationException::withMessages([
-                    'rate_id' => 'Rate yang dipilih tidak sesuai dengan cabang asal/tujuan.',
+                    'origin_branch_id' => 'Rute cabang asal dan tujuan belum punya tarif ongkir.',
+                ]);
+            }
+
+            if (!$courier) {
+                throw ValidationException::withMessages([
+                    'origin_branch_id' => 'Belum ada courier pickup aktif untuk cabang asal yang dipilih.',
                 ]);
             }
 
@@ -181,8 +236,8 @@ class ShipmentController extends Controller
                 'receiver_id' => $receiverId,
                 'origin_branch_id' => $validated['origin_branch_id'],
                 'destination_branch_id' => $validated['destination_branch_id'],
-                'courier_id' => $validated['courier_id'],
-                'rate_id' => $validated['rate_id'],
+                'courier_id' => $courier->id,
+                'rate_id' => $rate->id,
                 'total_weight' => $totalWeight,
                 'total_price' => $totalPrice,
                 'status' => Shipment::STATUS_PENDING,
@@ -271,5 +326,25 @@ class ShipmentController extends Controller
             'city' => $city,
             'phone' => $phone,
         ]);
+    }
+
+    private function resolveRateForBranchRoute(Branch $originBranch, Branch $destinationBranch): ?Rate
+    {
+        return Rate::query()
+            ->whereRaw('LOWER(origin_city) = ?', [mb_strtolower((string) $originBranch->city)])
+            ->whereRaw('LOWER(destination_city) = ?', [mb_strtolower((string) $destinationBranch->city)])
+            ->orderBy('price_per_kg')
+            ->orderBy('estimated_days')
+            ->first();
+    }
+
+    private function resolveCourierForBranch(int $originBranchId): ?User
+    {
+        return User::resolveCourierForTask($originBranchId, User::COURIER_TASK_PICKUP);
+    }
+
+    private function cityRouteKey(string $originCity, string $destinationCity): string
+    {
+        return mb_strtolower(trim($originCity)) . '|' . mb_strtolower(trim($destinationCity));
     }
 }

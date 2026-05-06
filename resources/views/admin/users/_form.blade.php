@@ -1,4 +1,5 @@
 <div class="form-group mb-3"><label>Name</label><input type="text" name="name" class="form-control" value="{{ old('name', $user->name ?? '') }}" required></div>
+<div class="small text-muted mb-3">Untuk role courier, nama atau email bisa mengandung kata <strong>pickup</strong>, <strong>drop</strong>, atau <strong>hth</strong> agar task dibagi otomatis sesuai cabang dan tahap pengiriman.</div>
 <div class="form-group mb-3"><label>Email</label><input type="email" name="email" class="form-control" value="{{ old('email', $user->email ?? '') }}" required></div>
 <div class="form-group mb-3"><label>Role</label>
 <select name="role" class="form-control" required>

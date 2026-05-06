@@ -1,5 +1,7 @@
 @extends('be.master')
 @section('content')
+@php($isCourierRole = Auth::user()?->role === \App\Models\User::ROLE_COURIER)
+@php($canManageTrackings = in_array('create', config('role_feature_matrix.roles.' . (Auth::user()->role ?? '') . '.tables.shipment_trackings', []), true))
 <div class="main-panel"><div class="content-wrapper">
 @include('admin.partials.alerts')
 <div class="card mb-3"><div class="card-body">
@@ -25,10 +27,12 @@
 </div>
 @endif
 <div class="d-flex flex-wrap mt-3" style="gap:8px;">
-  <a href="{{ route('shipments.label', $shipment) }}" class="btn btn-outline-light" target="_blank">Print Label</a>
+  <a href="{{ route('shipments.label', $shipment) . ($isCourierRole ? '?preview=1' : '') }}" class="btn btn-outline-light" target="_blank">{{ $isCourierRole ? 'Lihat Resi' : 'Print Label' }}</a>
+  @if ($canManageTrackings)
   <a href="{{ route('shipment-trackings.create', ['shipment_id' => $shipment->id, 'status' => \App\Models\ShipmentTracking::STATUS_FAILED_DELIVERY]) }}" class="btn btn-warning">Catat Gagal Antar</a>
   <a href="{{ route('shipment-trackings.create', ['shipment_id' => $shipment->id, 'status' => \App\Models\ShipmentTracking::STATUS_EXCEPTION_HOLD]) }}" class="btn btn-danger">Hold / Exception</a>
   <a href="{{ route('shipment-trackings.create', ['shipment_id' => $shipment->id, 'status' => \App\Models\ShipmentTracking::STATUS_RETURNED_TO_SENDER]) }}" class="btn btn-secondary">Retur ke Pengirim</a>
+  @endif
   <a href="{{ route('shipments.index') }}" class="btn btn-secondary">Kembali</a>
 </div>
 </div></div>
@@ -43,7 +47,7 @@
 @endforelse
 </tbody></table></div></div></div>
 
-<div class="card mb-3"><div class="card-body"><h5 class="mb-3">Trackings</h5>
+<div class="card mb-3"><div class="card-body"><h5 class="mb-3">Status Pengiriman</h5>
 <div class="table-responsive"><table class="table table-dark table-striped">
 <thead><tr><th>Tracked At</th><th>Location</th><th>Status</th><th>Description</th><th>Checkpoint</th><th>POD</th></tr></thead><tbody>
 @forelse ($shipment->trackings as $tracking)
@@ -59,11 +63,13 @@
 </td>
 <td>{{ $tracking->checkpoint_type ?: '-' }}</td>
 <td>
-  @if ($tracking->proof_photo)
+  @if ($tracking->proofPhotoExists())
     <div class="mb-2">
-      <img src="{{ asset('uploads/shipment-trackings/' . $tracking->proof_photo) }}" alt="Bukti serah terima {{ $shipment->tracking_number }}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,.15);">
+      <img src="{{ $tracking->proofPhotoUrl() }}" alt="Bukti serah terima {{ $shipment->tracking_number }}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,.15);">
     </div>
-    <a href="{{ asset('uploads/shipment-trackings/' . $tracking->proof_photo) }}" target="_blank" class="btn btn-sm btn-info">Lihat Bukti</a>
+    <a href="{{ $tracking->proofPhotoUrl() }}" target="_blank" class="btn btn-sm btn-info">Lihat Bukti</a>
+  @elseif ($tracking->proof_photo)
+    <span class="text-warning">File bukti tidak ditemukan</span>
   @else
     <span class="text-muted">-</span>
   @endif

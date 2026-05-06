@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Payment;
 use App\Models\Shipment;
 use App\Models\ShipmentTracking;
 use App\Support\Uploads;
@@ -29,6 +30,7 @@ class CourierTaskController extends Controller
         $shipments = Shipment::with(['sender', 'receiver', 'originBranch', 'destinationBranch', 'trackings' => function ($query) {
             $query->latest('tracked_at');
         }, 'courier'])
+            ->whereHas('payment', fn ($query) => $query->where('payment_status', Payment::STATUS_PAID))
             ->when($courierId, fn ($query) => $query->where('courier_id', $courierId))
             ->when($status, fn ($query) => $query->where('status', $status))
             ->when($search, function ($query) use ($search) {
@@ -42,7 +44,9 @@ class CourierTaskController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        $taskSummaryQuery = Shipment::query()->when($courierId, fn ($query) => $query->where('courier_id', $courierId));
+        $taskSummaryQuery = Shipment::query()
+            ->whereHas('payment', fn ($query) => $query->where('payment_status', Payment::STATUS_PAID))
+            ->when($courierId, fn ($query) => $query->where('courier_id', $courierId));
         $today = now()->toDateString();
 
         $summary = [
@@ -50,12 +54,12 @@ class CourierTaskController extends Controller
             'today_assigned' => (clone $taskSummaryQuery)->whereDate('shipment_date', $today)->count(),
             'active' => (clone $taskSummaryQuery)->whereIn('status', [
                 Shipment::STATUS_PENDING,
-                Shipment::STATUS_PICKED_UP,
                 Shipment::STATUS_IN_TRANSIT,
+                Shipment::STATUS_PICKED_UP,
                 Shipment::STATUS_ARRIVED_AT_BRANCH,
                 Shipment::STATUS_OUT_FOR_DELIVERY,
             ])->count(),
-            'delivered' => (clone $taskSummaryQuery)->where('status', Shipment::STATUS_DELIVERED)->count(),
+            'completed' => (clone $taskSummaryQuery)->where('status', Shipment::STATUS_DELIVERED)->count(),
         ];
 
         return view('admin.courier.tasks', [
@@ -67,7 +71,7 @@ class CourierTaskController extends Controller
                 'q' => $search,
                 'courier_id' => $courierId,
             ],
-            'statuses' => Shipment::statuses(),
+            'statuses' => Shipment::courierTaskStatuses(),
             'couriers' => User::where('role', User::ROLE_COURIER)->orderBy('name')->get(),
             'isCourierView' => $user->role === User::ROLE_COURIER,
         ]);
@@ -78,6 +82,7 @@ class CourierTaskController extends Controller
         $user = Auth::user();
         $this->ensureAccess($user);
         $this->ensureShipmentAccess($user, $shipment);
+        $this->ensureShipmentPaid($shipment);
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(ShipmentTracking::statuses())],
@@ -89,8 +94,9 @@ class CourierTaskController extends Controller
             'tracked_at' => 'nullable|date',
         ]);
 
-        $nextStatuses = Shipment::nextTrackingStatuses($shipment->status);
-        if (!in_array($validated['status'], $nextStatuses, true) && $user->role === User::ROLE_COURIER) {
+        $shipment->loadMissing('trackings');
+        $nextStatuses = $shipment->nextCourierTaskStatuses();
+        if (!in_array($validated['status'], $nextStatuses, true)) {
             return back()->withErrors([
                 'status' => 'Perubahan status tidak valid. Ikuti urutan status pengiriman.',
             ]);
@@ -106,9 +112,9 @@ class CourierTaskController extends Controller
             'shipment_id' => $shipment->id,
             'location' => $validated['location'],
             'description' => $validated['description'] ?? 'Update dari dashboard courier.',
-            'checkpoint_type' => 'courier_update',
-            'received_by' => $validated['received_by'] ?? null,
-            'receiver_relation' => $validated['receiver_relation'] ?? null,
+            'checkpoint_type' => $shipment->courierTrackingCheckpointType(),
+            'received_by' => null,
+            'receiver_relation' => null,
             'proof_photo' => $validated['proof_photo'] ?? null,
             'status' => $validated['status'],
             'tracked_at' => $validated['tracked_at'] ?? now(),
@@ -116,6 +122,7 @@ class CourierTaskController extends Controller
 
         $shipment->update([
             'status' => $validated['status'],
+            'courier_id' => $this->resolveNextCourierId($shipment, $validated['status']),
             'exception_code' => $this->isExceptionStatus($validated['status']) ? $validated['status'] : null,
             'exception_notes' => $this->isExceptionStatus($validated['status']) ? ($validated['description'] ?? null) : null,
             'last_exception_at' => $this->isExceptionStatus($validated['status']) ? now() : $shipment->last_exception_at,
@@ -156,20 +163,17 @@ class CourierTaskController extends Controller
 
     private function applyDeliveryProofValidation(Request $request, array &$validated): void
     {
-        if ($validated['status'] !== ShipmentTracking::STATUS_DELIVERED) {
+        if (!Shipment::courierTaskRequiresProof($validated['status'])) {
             $validated['received_by'] = null;
             $validated['receiver_relation'] = null;
             return;
         }
 
-        validator($request->all(), [
-            'received_by' => 'required|string|max:100',
-            'receiver_relation' => 'nullable|string|max:50',
-        ])->validate();
-
         if (!$request->hasFile('proof_photo')) {
             throw ValidationException::withMessages([
-                'proof_photo' => 'Foto bukti serah terima wajib diunggah saat paket sudah sampai ke rumah penerima.',
+                'proof_photo' => $validated['status'] === ShipmentTracking::STATUS_PICKED_UP
+                    ? 'Foto bukti pickup wajib diunggah saat status sudah dipickup.'
+                    : 'Foto bukti pengantaran wajib diunggah saat status sampai di tujuan.',
             ]);
         }
     }
@@ -181,5 +185,44 @@ class CourierTaskController extends Controller
             ShipmentTracking::STATUS_EXCEPTION_HOLD,
             ShipmentTracking::STATUS_RETURNED_TO_SENDER,
         ], true);
+    }
+
+    private function ensureShipmentPaid(Shipment $shipment): void
+    {
+        $shipment->loadMissing('payment');
+        if (!$shipment->payment || $shipment->payment->payment_status !== Payment::STATUS_PAID) {
+            throw ValidationException::withMessages([
+                'status' => 'Shipment belum lunas. Status pengiriman tidak bisa diupdate.',
+            ]);
+        }
+    }
+
+    private function resolveNextCourierId(Shipment $shipment, string $nextStatus): int
+    {
+        if (in_array($nextStatus, [
+            ShipmentTracking::STATUS_EXCEPTION_HOLD,
+            ShipmentTracking::STATUS_FAILED_DELIVERY,
+            ShipmentTracking::STATUS_RETURNED_TO_SENDER,
+        ], true)) {
+            return (int) $shipment->courier_id;
+        }
+
+        $shipment->status = $nextStatus;
+        $nextCourier = $shipment->resolveResponsibleCourierForStatus($nextStatus);
+
+        if ($nextCourier) {
+            return (int) $nextCourier->id;
+        }
+
+        throw ValidationException::withMessages([
+            'status' => match ($nextStatus) {
+                ShipmentTracking::STATUS_PICKED_UP,
+                ShipmentTracking::STATUS_IN_TRANSIT => 'Belum ada courier HTH aktif di cabang asal untuk melanjutkan shipment ini.',
+                ShipmentTracking::STATUS_ARRIVED_AT_BRANCH,
+                ShipmentTracking::STATUS_OUT_FOR_DELIVERY,
+                ShipmentTracking::STATUS_DELIVERED => 'Belum ada courier drop aktif di cabang tujuan untuk melanjutkan shipment ini.',
+                default => 'Belum ada courier yang sesuai untuk status ini.',
+            },
+        ]);
     }
 }

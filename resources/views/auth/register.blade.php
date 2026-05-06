@@ -28,6 +28,14 @@
                             <div class="cp-muted-small">Isi data dengan benar agar proses pengiriman lebih cepat.</div>
                         </div>
                         <div class="cp-card-body">
+                            @if (session('success'))
+                                <div class="alert alert-success border-0">{{ session('success') }}</div>
+                            @endif
+
+                            @if (session('warning'))
+                                <div class="alert alert-warning border-0">{{ session('warning') }}</div>
+                            @endif
+
                             @if ($errors->any())
                                 <div class="alert alert-danger border-0">
                                     <ul class="mb-0 pl-3">
@@ -87,6 +95,9 @@
                                 <button type="submit" class="btn btn-primary btn-block">Register</button>
                             </form>
 
+                            <div class="text-center mt-3 cp-muted-small">
+                                Setelah register, akun akan diverifikasi dulu dengan OTP yang dikirim ke email Anda.
+                            </div>
                             <div class="text-center mt-3 cp-muted-small">
                                 Sudah punya akun?
                                 <a href="{{ route('login') }}">Login sekarang</a>

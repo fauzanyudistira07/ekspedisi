@@ -13,6 +13,7 @@ class Customer extends Authenticatable
         'name',
         'email',
         'password',
+        'email_verified_at',
         'address',
         'city',
         'phone',
@@ -26,6 +27,7 @@ class Customer extends Authenticatable
     ];
 
     protected $casts = [
+        'email_verified_at' => 'datetime',
         'last_tracking_seen_at' => 'datetime',
     ];
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\Payment;
 use App\Models\Shipment;
 use App\Models\ShipmentTracking;
 use App\Models\ShipmentManifest;
@@ -14,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ManifestController extends Controller
 {
@@ -55,6 +57,7 @@ class ManifestController extends Controller
             'couriers' => User::where('role', User::ROLE_COURIER)->orderBy('name')->get(),
             'shipments' => Shipment::with(['originBranch', 'destinationBranch', 'courier'])
                 ->whereIn('status', Shipment::manifestEligibleStatuses())
+                ->whereHas('payment', fn ($query) => $query->where('payment_status', Payment::STATUS_PAID))
                 ->orderBy('tracking_number')
                 ->get(),
             'statuses' => ShipmentManifest::statuses(),
@@ -86,6 +89,7 @@ class ManifestController extends Controller
         if (empty($validated['manifest_number'])) {
             $validated['manifest_number'] = 'MAN-' . now()->format('YmdHis');
         }
+        $this->ensurePaidShipmentIds($validated['shipment_ids']);
 
         DB::transaction(function () use ($validated): void {
             $manifest = ShipmentManifest::create(collect($validated)->except('shipment_ids')->all());
@@ -135,8 +139,13 @@ class ManifestController extends Controller
             'vehicles' => Vehicle::with('courier')->orderBy('plate_number')->get(),
             'couriers' => User::where('role', User::ROLE_COURIER)->orderBy('name')->get(),
             'shipments' => Shipment::with(['originBranch', 'destinationBranch', 'courier'])
-                ->whereIn('status', Shipment::manifestEligibleStatuses())
-                ->orWhereIn('id', $manifest->shipments()->pluck('shipments.id'))
+                ->where(function ($query) use ($manifest) {
+                    $query->where(function ($eligibleQuery) {
+                        $eligibleQuery
+                            ->whereIn('status', Shipment::manifestEligibleStatuses())
+                            ->whereHas('payment', fn ($paymentQuery) => $paymentQuery->where('payment_status', Payment::STATUS_PAID));
+                    })->orWhereIn('id', $manifest->shipments()->pluck('shipments.id'));
+                })
                 ->orderBy('tracking_number')
                 ->get(),
             'statuses' => ShipmentManifest::statuses(),
@@ -164,6 +173,7 @@ class ManifestController extends Controller
             'shipment_ids' => 'required|array|min:1',
             'shipment_ids.*' => 'exists:shipments,id',
         ]);
+        $this->ensurePaidShipmentIds($validated['shipment_ids']);
 
         DB::transaction(function () use ($manifest, $validated): void {
             $oldValues = $manifest->only(['manifest_type', 'status', 'branch_id', 'vehicle_id', 'courier_id']);
@@ -192,6 +202,7 @@ class ManifestController extends Controller
     public function checkpointUpdate(Request $request, ShipmentManifest $manifest, Shipment $shipment)
     {
         $this->ensureAccess();
+        $this->ensurePaidShipmentIds([$shipment->id]);
 
         if (!$manifest->shipments()->where('shipments.id', $shipment->id)->exists()) {
             abort(404, 'Shipment tidak ada di manifest ini.');
@@ -297,5 +308,24 @@ class ManifestController extends Controller
                 : null,
             default => null,
         };
+    }
+
+    private function ensurePaidShipmentIds(array $shipmentIds): void
+    {
+        $shipmentIds = array_values(array_unique(array_map('intval', $shipmentIds)));
+
+        $paidShipmentIds = Shipment::query()
+            ->whereIn('id', $shipmentIds)
+            ->whereHas('payment', fn ($query) => $query->where('payment_status', Payment::STATUS_PAID))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $unpaidIds = array_values(array_diff($shipmentIds, $paidShipmentIds));
+        if (!empty($unpaidIds)) {
+            throw ValidationException::withMessages([
+                'shipment_ids' => 'Hanya shipment dengan pembayaran lunas yang boleh dimasukkan ke manifest.',
+            ]);
+        }
     }
 }

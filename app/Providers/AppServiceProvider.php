@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\ShipmentTracking;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\View;
@@ -22,6 +23,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Paginator::useBootstrapFour();
+
         View::composer('fe.master', function ($view): void {
             if (!Auth::guard('customer')->check()) {
                 $view->with('trackingNotificationCount', 0)

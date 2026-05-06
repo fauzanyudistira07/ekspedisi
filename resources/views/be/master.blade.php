@@ -24,6 +24,7 @@
         $portalLabel = match ($role) {
             'courier' => 'Workspace Kurir',
             'cashier' => 'Desk Keuangan',
+            'casier' => 'Desk Casier',
             'manager' => 'Control Tower Manager',
             default => 'Portal Internal Ekspedisi Online',
         };
@@ -34,6 +35,11 @@
                 ['label' => 'Tracking', 'route' => route('shipment-trackings.index')],
             ],
             'cashier' => [
+                ['label' => 'Dashboard', 'route' => route('dashboard.index')],
+                ['label' => 'Payments', 'route' => route('payments.index')],
+                ['label' => 'Shipment', 'route' => route('shipments.index')],
+            ],
+            'casier' => [
                 ['label' => 'Dashboard', 'route' => route('dashboard.index')],
                 ['label' => 'Payments', 'route' => route('payments.index')],
                 ['label' => 'Shipment', 'route' => route('shipments.index')],

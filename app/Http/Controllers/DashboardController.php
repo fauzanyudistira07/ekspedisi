@@ -119,8 +119,8 @@ class DashboardController extends Controller
                 'tone' => 'warning',
                 'title' => 'Delivery Proof Belum Lengkap',
                 'description' => $deliveredWithoutFreshTracking . ' shipment delivered belum punya tracking delivered yang valid.',
-                'route' => route('shipment-trackings.index', ['status' => ShipmentTracking::STATUS_DELIVERED]),
-                'action' => 'Cek Tracking',
+                'route' => route('shipments.index', ['status' => Shipment::STATUS_DELIVERED]),
+                'action' => 'Cek Shipment',
             ]);
         }
 
@@ -178,7 +178,7 @@ class DashboardController extends Controller
                     'tone' => 'info',
                 ],
                 [
-                    'label' => 'Omzet Paid Hari Ini',
+                    'label' => 'Uang Masuk',
                     'value' => 'Rp ' . number_format((float) $stats['payments_paid_today'], 0, ',', '.'),
                     'meta' => number_format($stats['payments_failed']) . ' pembayaran gagal',
                     'route' => route('payments.index', ['status' => Payment::STATUS_PAID]),
@@ -192,7 +192,8 @@ class DashboardController extends Controller
                 ['label' => 'Shipment Saya', 'route' => route('shipments.index'), 'style' => 'btn-outline-light'],
                 ['label' => 'Riwayat Tracking', 'route' => route('shipment-trackings.index'), 'style' => 'btn-outline-light'],
             ],
-            User::ROLE_CASHIER => [
+            User::ROLE_CASHIER,
+            User::ROLE_CASIER => [
                 ['label' => 'Pending Midtrans', 'route' => route('payments.index', ['status' => Payment::STATUS_PENDING]), 'style' => 'btn-primary'],
                 ['label' => 'Riwayat Pembayaran', 'route' => route('payments.index'), 'style' => 'btn-outline-light'],
             ],
@@ -211,7 +212,8 @@ class DashboardController extends Controller
 
         $roleFocus = match ($currentRole) {
             User::ROLE_COURIER => 'Fokus hari ini: update tracking tepat waktu, pastikan semua paket transit mendapat status terbaru.',
-            User::ROLE_CASHIER => 'Fokus hari ini: monitor transaksi Midtrans pending, pastikan status pembayaran tersinkron dengan benar.',
+            User::ROLE_CASHIER,
+            User::ROLE_CASIER => 'Fokus hari ini: monitor transaksi Midtrans pending, pastikan status pembayaran tersinkron dengan benar.',
             User::ROLE_MANAGER => 'Fokus hari ini: awasi SLA pengiriman, progres tracking, dan status pembayaran yang bermasalah.',
             default => 'Fokus hari ini: pastikan master data, operasional shipment, dan pembayaran berjalan konsisten.',
         };

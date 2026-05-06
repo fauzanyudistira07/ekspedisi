@@ -122,6 +122,7 @@ class ShipmentController extends Controller
             $validated['rate_id'],
             (float) $validated['total_weight'],
         );
+        $validated['courier_id'] = $this->resolveAutomaticCourierAssignment($validated, $validated['courier_id']);
 
         if ($request->hasFile('photo')) {
             $validated['photo'] = Uploads::storePublic($request->file('photo'), 'shipments');
@@ -152,17 +153,23 @@ class ShipmentController extends Controller
         ]);
     }
 
-    public function label(Shipment $shipment)
+    public function label(Request $request, Shipment $shipment)
     {
         $this->ensureTablePermission('shipments', 'read');
         $this->ensureShipmentVisibility($shipment);
 
         $shipment->load(['sender', 'receiver', 'originBranch', 'destinationBranch', 'courier', 'items']);
 
-        $pdf = Pdf::loadView('admin.shipments.label', [
+        $viewData = [
             'shipment' => $shipment,
             'barcodeRows' => $this->buildLabelBarcodeRows($shipment->tracking_number),
-        ])->setPaper([0, 0, 283.46, 425.2]);
+        ];
+
+        if ($request->boolean('preview')) {
+            return view('admin.shipments.label_preview', $viewData);
+        }
+
+        $pdf = Pdf::loadView('admin.shipments.label', $viewData)->setPaper([0, 0, 425.2, 283.46]);
 
         return $pdf->stream('label-' . $shipment->tracking_number . '.pdf');
     }
@@ -211,6 +218,7 @@ class ShipmentController extends Controller
             $validated['rate_id'],
             (float) $validated['total_weight'],
         );
+        $validated['courier_id'] = $this->resolveAutomaticCourierAssignment($validated, $validated['courier_id']);
 
         if ($request->hasFile('photo')) {
             $validated['photo'] = Uploads::storePublic($request->file('photo'), 'shipments');
@@ -282,5 +290,41 @@ class ShipmentController extends Controller
         }
 
         return $rows;
+    }
+
+    private function resolveAutomaticCourierAssignment(array $validated, int|string $fallbackCourierId): int
+    {
+        if (in_array($validated['status'], [
+            Shipment::STATUS_EXCEPTION_HOLD,
+            Shipment::STATUS_FAILED_DELIVERY,
+            Shipment::STATUS_RETURNED_TO_SENDER,
+            Shipment::STATUS_CANCELLED,
+        ], true)) {
+            return (int) $fallbackCourierId;
+        }
+
+        $shipment = new Shipment([
+            'origin_branch_id' => $validated['origin_branch_id'],
+            'destination_branch_id' => $validated['destination_branch_id'],
+            'status' => $validated['status'],
+        ]);
+
+        $courier = $shipment->resolveResponsibleCourierForStatus($validated['status']);
+
+        if ($courier) {
+            return (int) $courier->id;
+        }
+
+        throw ValidationException::withMessages([
+            'courier_id' => match ($validated['status']) {
+                Shipment::STATUS_PENDING => 'Belum ada courier pickup aktif di cabang asal.',
+                Shipment::STATUS_PICKED_UP,
+                Shipment::STATUS_IN_TRANSIT => 'Belum ada courier HTH aktif di cabang asal.',
+                Shipment::STATUS_ARRIVED_AT_BRANCH,
+                Shipment::STATUS_OUT_FOR_DELIVERY,
+                Shipment::STATUS_DELIVERED => 'Belum ada courier drop aktif di cabang tujuan.',
+                default => 'Belum ada courier yang sesuai untuk status shipment ini.',
+            },
+        ]);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Uploads;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -83,5 +84,19 @@ class ShipmentTracking extends Model
     public function requiresDeliveryProof(): bool
     {
         return $this->status === self::STATUS_DELIVERED;
+    }
+
+    public function proofPhotoExists(): bool
+    {
+        return Uploads::exists('shipment-trackings', $this->proof_photo);
+    }
+
+    public function proofPhotoUrl(): ?string
+    {
+        if (!$this->proofPhotoExists()) {
+            return null;
+        }
+
+        return Uploads::publicUrl('shipment-trackings', $this->proof_photo);
     }
 }

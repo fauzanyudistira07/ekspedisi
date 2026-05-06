@@ -4,6 +4,7 @@
 <div class="main-panel"><div class="content-wrapper">
 @include('admin.partials.alerts')
 <div class="card"><div class="card-body">
+<div class="cp-info-box mb-3">Tarif ini dipakai untuk menghitung ongkir otomatis pada form shipment customer dan admin berdasarkan rute cabang asal ke cabang tujuan.</div>
 <div class="d-flex justify-content-between align-items-center mb-3">
 <h4 class="card-title mb-0">Rates</h4>
 <a href="{{ route('rates.create') }}" class="btn btn-primary">Tambah Rate</a>

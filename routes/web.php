@@ -51,12 +51,15 @@ Route::middleware('guest')->group(function () {
     // register
     Route::get('/register', [RegisterController::class, 'create'])->name('auth.register');
     Route::post('/register', [RegisterController::class, 'store'])->name('auth.register.store');
+    Route::get('/register/verify-otp', [RegisterController::class, 'showOtpForm'])->name('auth.register.verify');
+    Route::post('/register/verify-otp', [RegisterController::class, 'verifyOtp'])->name('auth.register.verify.submit');
+    Route::post('/register/resend-otp', [RegisterController::class, 'resendOtp'])->name('auth.register.resend-otp');
 });
 
 // ======================
 // HALAMAN SETELAH LOGIN
 // ======================
-Route::middleware(['auth', 'role:admin,cashier,courier,manager'])->group(function () {
+Route::middleware(['auth', 'role:admin,cashier,casier,courier,manager'])->group(function () {
 
     Route::resource('/dashboard', DashboardController::class)->only(['index']);
 

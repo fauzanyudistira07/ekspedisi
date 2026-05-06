@@ -52,11 +52,13 @@
                             @if ($tracking->received_by)
                                 <div class="cp-muted-small">Diterima oleh: <strong>{{ $tracking->received_by }}</strong>{{ $tracking->receiver_relation ? ' (' . $tracking->receiver_relation . ')' : '' }}</div>
                             @endif
-                            @if ($tracking->proof_photo)
+                            @if ($tracking->proofPhotoExists())
                                 <div class="mt-2">
-                                    <img src="{{ asset('uploads/shipment-trackings/' . $tracking->proof_photo) }}" alt="Bukti serah terima {{ $shipment->tracking_number }}" style="width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid #dbe4f0;">
+                                    <img src="{{ $tracking->proofPhotoUrl() }}" alt="Bukti serah terima {{ $shipment->tracking_number }}" style="width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid #dbe4f0;">
                                 </div>
-                                <a href="{{ asset('uploads/shipment-trackings/' . $tracking->proof_photo) }}" target="_blank" class="btn btn-sm btn-outline-info mt-2">Lihat Bukti Serah Terima</a>
+                                <a href="{{ $tracking->proofPhotoUrl() }}" target="_blank" class="btn btn-sm btn-outline-info mt-2">Lihat Bukti Serah Terima</a>
+                            @elseif ($tracking->proof_photo)
+                                <div class="small text-warning mt-2">File bukti tidak ditemukan.</div>
                             @endif
                         </li>
                     @empty

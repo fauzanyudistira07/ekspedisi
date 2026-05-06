@@ -13,7 +13,7 @@ return new class extends Migration {
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->enum('role', ['admin', 'cashier', 'courier', 'manager']);
+            $table->enum('role', ['admin', 'cashier', 'casier', 'courier', 'manager']);
             $table->foreignId('branch_id')->nullable()->constrained('branches')->nullOnDelete();
             $table->rememberToken();
             $table->timestamps();
