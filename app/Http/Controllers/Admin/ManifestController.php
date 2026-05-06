@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Shipment;
+use App\Models\ShipmentTracking;
 use App\Models\ShipmentManifest;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -116,12 +117,154 @@ class ManifestController extends Controller
                 'branch',
                 'vehicle.courier',
                 'courier',
-                'shipments.originBranch',
-                'shipments.destinationBranch',
-                'shipments.courier',
+                'shipments' => fn ($query) => $query->with(['originBranch', 'destinationBranch', 'courier'])->orderBy('tracking_number'),
                 'auditLogs.actor',
             ]),
+            'checkpointStatuses' => ShipmentManifest::checkpointStatuses(),
         ]);
+    }
+
+    public function edit(ShipmentManifest $manifest)
+    {
+        $this->ensureAccess();
+
+        return view('admin.manifests.edit', [
+            'title' => 'Edit Manifest',
+            'manifest' => $manifest,
+            'branches' => Branch::orderBy('name')->get(),
+            'vehicles' => Vehicle::with('courier')->orderBy('plate_number')->get(),
+            'couriers' => User::where('role', User::ROLE_COURIER)->orderBy('name')->get(),
+            'shipments' => Shipment::with(['originBranch', 'destinationBranch', 'courier'])
+                ->whereIn('status', Shipment::manifestEligibleStatuses())
+                ->orWhereIn('id', $manifest->shipments()->pluck('shipments.id'))
+                ->orderBy('tracking_number')
+                ->get(),
+            'statuses' => ShipmentManifest::statuses(),
+            'types' => ShipmentManifest::types(),
+        ]);
+    }
+
+    public function update(Request $request, ShipmentManifest $manifest)
+    {
+        $this->ensureAccess();
+
+        $validated = $request->validate([
+            'manifest_number' => 'required|string|max:255|unique:shipment_manifests,manifest_number,' . $manifest->id,
+            'branch_id' => 'nullable|exists:branches,id',
+            'vehicle_id' => 'nullable|exists:vehicles,id',
+            'courier_id' => [
+                'nullable',
+                Rule::exists('users', 'id')->where(fn ($query) => $query->where('role', User::ROLE_COURIER)),
+            ],
+            'manifest_type' => ['required', Rule::in(ShipmentManifest::types())],
+            'status' => ['required', Rule::in(ShipmentManifest::statuses())],
+            'departed_at' => 'nullable|date',
+            'arrived_at' => 'nullable|date|after_or_equal:departed_at',
+            'notes' => 'nullable|string',
+            'shipment_ids' => 'required|array|min:1',
+            'shipment_ids.*' => 'exists:shipments,id',
+        ]);
+
+        DB::transaction(function () use ($manifest, $validated): void {
+            $oldValues = $manifest->only(['manifest_type', 'status', 'branch_id', 'vehicle_id', 'courier_id']);
+            $manifest->update(collect($validated)->except('shipment_ids')->all());
+            $manifest->shipments()->sync($validated['shipment_ids']);
+
+            AuditLogger::log(
+                $manifest,
+                'manifest.updated',
+                'Manifest ' . $manifest->manifest_number . ' diperbarui.',
+                $oldValues,
+                [
+                    'manifest_type' => $manifest->manifest_type,
+                    'status' => $manifest->status,
+                    'branch_id' => $manifest->branch_id,
+                    'vehicle_id' => $manifest->vehicle_id,
+                    'courier_id' => $manifest->courier_id,
+                    'shipment_ids' => $validated['shipment_ids'],
+                ],
+            );
+        });
+
+        return redirect()->route('manifests.show', $manifest)->with('success', 'Manifest berhasil diperbarui.');
+    }
+
+    public function checkpointUpdate(Request $request, ShipmentManifest $manifest, Shipment $shipment)
+    {
+        $this->ensureAccess();
+
+        if (!$manifest->shipments()->where('shipments.id', $shipment->id)->exists()) {
+            abort(404, 'Shipment tidak ada di manifest ini.');
+        }
+
+        $validated = $request->validate([
+            'checkpoint_status' => ['required', Rule::in(ShipmentManifest::checkpointStatuses())],
+            'checkpoint_notes' => 'nullable|string|max:1000',
+            'location' => 'nullable|string|max:255',
+        ]);
+
+        DB::transaction(function () use ($manifest, $shipment, $validated): void {
+            $pivotData = [
+                'checkpoint_status' => $validated['checkpoint_status'],
+                'checkpoint_notes' => $validated['checkpoint_notes'] ?? null,
+            ];
+
+            if (in_array($validated['checkpoint_status'], ['loaded', 'departed'], true)) {
+                $pivotData['loaded_at'] = now();
+            }
+
+            if (in_array($validated['checkpoint_status'], ['arrived', 'unloaded'], true)) {
+                $pivotData['unloaded_at'] = now();
+            }
+
+            $manifest->shipments()->updateExistingPivot($shipment->id, $pivotData);
+
+            $trackingStatus = $this->resolveTrackingStatusFromManifest($manifest, $validated['checkpoint_status']);
+            if ($trackingStatus) {
+                ShipmentTracking::create([
+                    'shipment_id' => $shipment->id,
+                    'branch_id' => $manifest->branch_id,
+                    'location' => $validated['location'] ?: ($manifest->branch->name ?? 'Manifest ' . $manifest->manifest_number),
+                    'description' => $validated['checkpoint_notes'] ?: ('Update manifest ' . $manifest->manifest_number),
+                    'checkpoint_type' => 'manifest_' . $manifest->manifest_type,
+                    'status' => $trackingStatus,
+                    'tracked_at' => now(),
+                ]);
+
+                $shipment->update([
+                    'status' => $trackingStatus,
+                    'exception_code' => in_array($trackingStatus, [
+                        Shipment::STATUS_EXCEPTION_HOLD,
+                        Shipment::STATUS_FAILED_DELIVERY,
+                        Shipment::STATUS_RETURNED_TO_SENDER,
+                    ], true) ? $trackingStatus : null,
+                    'exception_notes' => in_array($trackingStatus, [
+                        Shipment::STATUS_EXCEPTION_HOLD,
+                        Shipment::STATUS_FAILED_DELIVERY,
+                        Shipment::STATUS_RETURNED_TO_SENDER,
+                    ], true) ? ($validated['checkpoint_notes'] ?? null) : null,
+                    'last_exception_at' => in_array($trackingStatus, [
+                        Shipment::STATUS_EXCEPTION_HOLD,
+                        Shipment::STATUS_FAILED_DELIVERY,
+                        Shipment::STATUS_RETURNED_TO_SENDER,
+                    ], true) ? now() : $shipment->last_exception_at,
+                ]);
+            }
+
+            AuditLogger::log(
+                $manifest,
+                'manifest.checkpoint_updated',
+                'Checkpoint shipment ' . $shipment->tracking_number . ' di manifest ' . $manifest->manifest_number . ' diubah menjadi ' . ShipmentManifest::checkpointStatusLabel($validated['checkpoint_status']) . '.',
+                null,
+                [
+                    'shipment_id' => $shipment->id,
+                    'checkpoint_status' => $validated['checkpoint_status'],
+                    'checkpoint_notes' => $validated['checkpoint_notes'] ?? null,
+                ],
+            );
+        });
+
+        return redirect()->route('manifests.show', $manifest)->with('success', 'Checkpoint manifest berhasil diperbarui.');
     }
 
     private function ensureAccess(): void
@@ -131,5 +274,28 @@ class ManifestController extends Controller
         if (!in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER], true)) {
             abort(403, 'Anda tidak memiliki akses ke manifest.');
         }
+    }
+
+    private function resolveTrackingStatusFromManifest(ShipmentManifest $manifest, string $checkpointStatus): ?string
+    {
+        if ($checkpointStatus === 'exception_hold') {
+            return ShipmentTracking::STATUS_EXCEPTION_HOLD;
+        }
+
+        return match ($manifest->manifest_type) {
+            ShipmentManifest::TYPE_PICKUP => in_array($checkpointStatus, ['loaded', 'departed'], true)
+                ? ShipmentTracking::STATUS_PICKED_UP
+                : null,
+            ShipmentManifest::TYPE_LINEHAUL => in_array($checkpointStatus, ['loaded', 'departed', 'arrived'], true)
+                ? ShipmentTracking::STATUS_IN_TRANSIT
+                : null,
+            ShipmentManifest::TYPE_ARRIVAL => in_array($checkpointStatus, ['arrived', 'unloaded'], true)
+                ? ShipmentTracking::STATUS_ARRIVED_AT_BRANCH
+                : null,
+            ShipmentManifest::TYPE_DELIVERY => in_array($checkpointStatus, ['loaded', 'departed'], true)
+                ? ShipmentTracking::STATUS_OUT_FOR_DELIVERY
+                : null,
+            default => null,
+        };
     }
 }

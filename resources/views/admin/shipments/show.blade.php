@@ -24,7 +24,13 @@
   <div class="small mt-1">{{ $shipment->exception_notes ?: 'Belum ada catatan exception.' }}</div>
 </div>
 @endif
-<a href="{{ route('shipments.index') }}" class="btn btn-secondary">Kembali</a>
+<div class="d-flex flex-wrap mt-3" style="gap:8px;">
+  <a href="{{ route('shipments.label', $shipment) }}" class="btn btn-outline-light" target="_blank">Print Label</a>
+  <a href="{{ route('shipment-trackings.create', ['shipment_id' => $shipment->id, 'status' => \App\Models\ShipmentTracking::STATUS_FAILED_DELIVERY]) }}" class="btn btn-warning">Catat Gagal Antar</a>
+  <a href="{{ route('shipment-trackings.create', ['shipment_id' => $shipment->id, 'status' => \App\Models\ShipmentTracking::STATUS_EXCEPTION_HOLD]) }}" class="btn btn-danger">Hold / Exception</a>
+  <a href="{{ route('shipment-trackings.create', ['shipment_id' => $shipment->id, 'status' => \App\Models\ShipmentTracking::STATUS_RETURNED_TO_SENDER]) }}" class="btn btn-secondary">Retur ke Pengirim</a>
+  <a href="{{ route('shipments.index') }}" class="btn btn-secondary">Kembali</a>
+</div>
 </div></div>
 
 <div class="card mb-3"><div class="card-body"><h5 class="mb-3">Items</h5>
@@ -54,6 +60,9 @@
 <td>{{ $tracking->checkpoint_type ?: '-' }}</td>
 <td>
   @if ($tracking->proof_photo)
+    <div class="mb-2">
+      <img src="{{ asset('uploads/shipment-trackings/' . $tracking->proof_photo) }}" alt="Bukti serah terima {{ $shipment->tracking_number }}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,.15);">
+    </div>
     <a href="{{ asset('uploads/shipment-trackings/' . $tracking->proof_photo) }}" target="_blank" class="btn btn-sm btn-info">Lihat Bukti</a>
   @else
     <span class="text-muted">-</span>
@@ -62,22 +71,6 @@
 </tr>
 @empty
 <tr><td colspan="6" class="text-center">Tidak ada tracking.</td></tr>
-@endforelse
-</tbody></table></div></div></div>
-
-<div class="card mb-3"><div class="card-body"><h5 class="mb-3">Manifest</h5>
-<div class="table-responsive"><table class="table table-dark table-striped">
-<thead><tr><th>Manifest</th><th>Tipe</th><th>Branch</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
-@forelse ($shipment->manifests as $manifest)
-<tr>
-<td>{{ $manifest->manifest_number }}</td>
-<td>{{ \App\Models\ShipmentManifest::typeLabel($manifest->manifest_type) }}</td>
-<td>{{ $manifest->branch->name ?? '-' }}</td>
-<td>{{ \App\Models\ShipmentManifest::statusLabel($manifest->status) }}</td>
-<td><a href="{{ route('manifests.show', $manifest) }}" class="btn btn-sm btn-info">Detail</a></td>
-</tr>
-@empty
-<tr><td colspan="5" class="text-center">Shipment ini belum masuk manifest.</td></tr>
 @endforelse
 </tbody></table></div></div></div>
 

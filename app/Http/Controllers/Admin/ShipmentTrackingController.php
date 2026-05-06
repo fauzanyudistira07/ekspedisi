@@ -76,6 +76,7 @@ class ShipmentTrackingController extends Controller
     {
         $this->ensureTablePermission('shipment_trackings', 'create');
         $selectedShipment = null;
+        $selectedStatus = $request->input('status');
 
         if ($request->filled('shipment_id')) {
             $selectedShipment = Shipment::findOrFail((int) $request->input('shipment_id'));
@@ -87,6 +88,7 @@ class ShipmentTrackingController extends Controller
             'shipments' => $this->visibleShipments(),
             'statuses' => ShipmentTracking::statuses(),
             'selectedShipment' => $selectedShipment,
+            'selectedStatus' => $selectedStatus,
         ]);
     }
 
@@ -151,6 +153,7 @@ class ShipmentTrackingController extends Controller
             'shipments' => $this->visibleShipments(),
             'statuses' => ShipmentTracking::statuses(),
             'selectedShipment' => $shipmentTracking->shipment,
+            'selectedStatus' => $shipmentTracking->status,
         ]);
     }
 
@@ -297,7 +300,7 @@ class ShipmentTrackingController extends Controller
 
         if (!$request->hasFile('proof_photo') && empty($existingProof)) {
             throw ValidationException::withMessages([
-                'proof_photo' => 'Foto bukti serah terima wajib diunggah untuk status delivered.',
+                'proof_photo' => 'Foto bukti serah terima wajib diunggah untuk status paket sudah sampai ke rumah penerima.',
             ]);
         }
     }

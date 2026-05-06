@@ -66,7 +66,7 @@ class ShipmentTracking extends Model
             self::STATUS_IN_TRANSIT => 'Dalam Perjalanan',
             self::STATUS_ARRIVED_AT_BRANCH => 'Tiba di Cabang Tujuan',
             self::STATUS_OUT_FOR_DELIVERY => 'Sedang Diantar',
-            self::STATUS_DELIVERED => 'Terkirim',
+            self::STATUS_DELIVERED => 'Sampai ke Rumah Penerima',
             self::STATUS_FAILED_DELIVERY => 'Gagal Antar',
             self::STATUS_EXCEPTION_HOLD => 'Exception / Hold',
             self::STATUS_RETURNED_TO_SENDER => 'Retur ke Pengirim',

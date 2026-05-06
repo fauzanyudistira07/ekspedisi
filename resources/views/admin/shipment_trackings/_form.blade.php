@@ -24,11 +24,11 @@
 @endif
 <div class="form-group mb-3"><label>Location</label><input type="text" name="location" class="form-control" value="{{ old('location', $shipmentTracking->location ?? '') }}" required></div>
 <div class="form-group mb-3"><label>Description</label><textarea name="description" class="form-control">{{ old('description', $shipmentTracking->description ?? '') }}</textarea></div>
-<div class="form-group mb-3"><label>Status</label><select name="status" id="tracking_status" class="form-control" required>@foreach($statuses as $status)<option value="{{ $status }}" {{ old('status', $shipmentTracking->status ?? '') === $status ? 'selected' : '' }}>{{ \App\Models\ShipmentTracking::statusLabel($status) }}</option>@endforeach</select></div>
+<div class="form-group mb-3"><label>Status</label><select name="status" id="tracking_status" class="form-control" required>@foreach($statuses as $status)<option value="{{ $status }}" {{ old('status', $shipmentTracking->status ?? $selectedStatus ?? '') === $status ? 'selected' : '' }}>{{ \App\Models\ShipmentTracking::statusLabel($status) }}</option>@endforeach</select></div>
 <div id="delivery_proof_fields" style="display:none;">
-<div class="form-group mb-3"><label>Received By</label><input type="text" name="received_by" class="form-control" value="{{ old('received_by', $shipmentTracking->received_by ?? '') }}"></div>
+<div class="form-group mb-3"><label>Received By</label><input type="text" name="received_by" class="form-control js-delivery-proof-input" value="{{ old('received_by', $shipmentTracking->received_by ?? '') }}"></div>
 <div class="form-group mb-3"><label>Receiver Relation</label><input type="text" name="receiver_relation" class="form-control" value="{{ old('receiver_relation', $shipmentTracking->receiver_relation ?? '') }}" placeholder="Keluarga / Security / Resepsionis"></div>
-<div class="form-group mb-3"><label>Proof Photo</label><input type="file" name="proof_photo" class="form-control" accept=".jpg,.jpeg,.png"></div>
+<div class="form-group mb-3"><label>Proof Photo</label><input type="file" name="proof_photo" class="form-control js-delivery-proof-input" accept="image/*" capture="environment"></div>
 @if (!empty($shipmentTracking?->proof_photo))
 <div class="form-group mb-3">
     <a href="{{ asset('uploads/shipment-trackings/' . $shipmentTracking->proof_photo) }}" target="_blank" class="btn btn-sm btn-info">Lihat Bukti Saat Ini</a>
@@ -36,7 +36,7 @@
 @endif
 </div>
 <div class="cp-info-box mb-3">
-  Bukti paket sampai dipakai hanya saat status <strong>delivered</strong>.
+  Bukti paket sampai dipakai hanya saat status <strong>sampai ke rumah penerima</strong>.
   Isinya: nama penerima, hubungan penerima bila perlu, dan foto proof of delivery.
 </div>
 <div class="form-group mb-3"><label>Tracked At</label><input type="datetime-local" name="tracked_at" class="form-control" value="{{ old('tracked_at', isset($shipmentTracking) && $shipmentTracking->tracked_at ? $shipmentTracking->tracked_at->format('Y-m-d\\TH:i') : now()->format('Y-m-d\\TH:i')) }}" required></div>
@@ -52,7 +52,12 @@
   }
 
   function toggleProofFields() {
-    proofFields.style.display = statusInput.value === 'delivered' ? '' : 'none';
+    const isDelivered = statusInput.value === 'delivered';
+    proofFields.style.display = isDelivered ? '' : 'none';
+
+    proofFields.querySelectorAll('.js-delivery-proof-input, input[name="received_by"]').forEach(function (input) {
+      input.required = isDelivered;
+    });
   }
 
   statusInput.addEventListener('change', toggleProofFields);

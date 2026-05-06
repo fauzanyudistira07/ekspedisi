@@ -169,7 +169,7 @@ class CourierTaskController extends Controller
 
         if (!$request->hasFile('proof_photo')) {
             throw ValidationException::withMessages([
-                'proof_photo' => 'Foto bukti serah terima wajib diunggah saat paket delivered.',
+                'proof_photo' => 'Foto bukti serah terima wajib diunggah saat paket sudah sampai ke rumah penerima.',
             ]);
         }
     }

@@ -60,6 +60,15 @@
           </div>
         </div>
       </div>
+      <div class="col-xl-3 col-md-6 grid-margin stretch-card">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="text-muted small text-uppercase dashboard-kpi-label">Exception</div>
+            <h3 class="mb-1 text-danger">{{ number_format($summary['exception'] ?? 0) }}</h3>
+            <div class="small text-muted">Shipment hold, gagal antar, atau retur</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="card border-0 shadow-sm">
@@ -73,6 +82,7 @@
             <a href="{{ route('shipments.index', ['status' => \App\Models\Shipment::STATUS_PENDING]) }}" class="btn btn-sm btn-outline-warning">Pending</a>
             <a href="{{ route('shipments.index', ['status' => \App\Models\Shipment::STATUS_IN_TRANSIT]) }}" class="btn btn-sm btn-outline-primary">In Transit</a>
             <a href="{{ route('shipments.index', ['status' => \App\Models\Shipment::STATUS_DELIVERED]) }}" class="btn btn-sm btn-outline-success">Delivered</a>
+            <a href="{{ route('shipments.index', ['status' => \App\Models\Shipment::STATUS_EXCEPTION_HOLD]) }}" class="btn btn-sm btn-outline-danger">Exception</a>
           </div>
         </div>
 
@@ -150,6 +160,7 @@
                   <td>
                     <div class="d-flex flex-wrap" style="gap:6px;">
                       <a href="{{ route('shipments.show', $shipment) }}" class="btn btn-sm btn-info">Detail</a>
+                      <a href="{{ route('shipments.label', $shipment) }}" class="btn btn-sm btn-outline-light" target="_blank">Label</a>
                       @if (in_array('update', config('role_feature_matrix.roles.' . (Auth::user()->role ?? '') . '.tables.shipments', []), true))
                         <a href="{{ route('shipments.edit', $shipment) }}" class="btn btn-sm btn-warning">Edit</a>
                       @endif

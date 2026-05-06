@@ -62,9 +62,11 @@ Route::middleware(['auth', 'role:admin,cashier,courier,manager'])->group(functio
 
     // modul operasional inti
     Route::resource('/shipments', ShipmentController::class);
+    Route::get('/shipments/{shipment}/label', [ShipmentController::class, 'label'])->name('shipments.label');
     Route::resource('/shipment-items', ShipmentItemController::class)->except(['show']);
     Route::resource('/shipment-trackings', ShipmentTrackingController::class)->except(['show']);
-    Route::resource('/manifests', ManifestController::class)->only(['index', 'create', 'store', 'show']);
+    Route::resource('/manifests', ManifestController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+    Route::patch('/manifests/{manifest}/shipments/{shipment}/checkpoint', [ManifestController::class, 'checkpointUpdate'])->name('manifests.shipments.checkpoint');
     Route::resource('/payments', PaymentController::class)->except(['show']);
     Route::get('/manager-reports', [ManagerReportController::class, 'index'])->name('manager.reports');
     Route::get('/manager-reports/export', [ManagerReportController::class, 'export'])->name('manager.reports.export');

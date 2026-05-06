@@ -52,7 +52,7 @@ class ShipmentManifest extends Model
 
     public function shipments()
     {
-        return $this->belongsToMany(Shipment::class, 'manifest_shipments')
+        return $this->belongsToMany(Shipment::class, 'manifest_shipments', 'manifest_id', 'shipment_id')
             ->withPivot(['loaded_at', 'unloaded_at', 'checkpoint_status', 'checkpoint_notes'])
             ->withTimestamps();
     }
@@ -60,6 +60,17 @@ class ShipmentManifest extends Model
     public function auditLogs()
     {
         return $this->morphMany(AuditLog::class, 'auditable')->latest();
+    }
+
+    public static function checkpointStatuses(): array
+    {
+        return [
+            'loaded',
+            'departed',
+            'arrived',
+            'unloaded',
+            'exception_hold',
+        ];
     }
 
     public static function types(): array
@@ -98,6 +109,18 @@ class ShipmentManifest extends Model
             self::STATUS_DRAFT => 'Draft',
             self::STATUS_IN_PROGRESS => 'Berjalan',
             self::STATUS_CLOSED => 'Ditutup',
+            default => strtoupper((string) $status),
+        };
+    }
+
+    public static function checkpointStatusLabel(?string $status): string
+    {
+        return match ($status) {
+            'loaded' => 'Sudah Dimuat',
+            'departed' => 'Sudah Berangkat',
+            'arrived' => 'Sudah Tiba',
+            'unloaded' => 'Sudah Diturunkan',
+            'exception_hold' => 'Hold / Exception',
             default => strtoupper((string) $status),
         };
     }

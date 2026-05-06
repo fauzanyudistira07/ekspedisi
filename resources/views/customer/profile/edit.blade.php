@@ -7,7 +7,12 @@
         <div class="cp-card-body">
             <div class="row align-items-center mb-4">
                 <div class="col-auto">
-                    <img src="{{ $customer->photo ? asset('uploads/customers/' . $customer->photo) : asset('assets/images/user.jpg') }}" alt="Foto" style="width:78px;height:78px;border-radius:50%;object-fit:cover;border:3px solid #dbe4f0;">
+                    @php($customerInitials = collect(preg_split('/\s+/', trim($customer->name)))->filter()->take(2)->map(fn ($part) => strtoupper(substr($part, 0, 1)))->implode(''))
+                    @if ($customer->photo)
+                        <img src="{{ asset('uploads/customers/' . $customer->photo) }}" alt="Foto" style="width:78px;height:78px;border-radius:50%;object-fit:cover;border:3px solid #dbe4f0;">
+                    @else
+                        <span class="cp-avatar cp-avatar-lg" aria-hidden="true">{{ $customerInitials ?: 'C' }}</span>
+                    @endif
                 </div>
                 <div class="col">
                     <h5 class="mb-1">{{ $customer->name }}</h5>

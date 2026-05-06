@@ -16,6 +16,15 @@
 <body class="customer-portal">
     @php($customer = Auth::guard('customer')->user())
     @php($isCustomerAuth = Auth::guard('customer')->check())
+    @php(
+        $customerInitials = $customer
+            ? collect(preg_split('/\s+/', trim($customer->name ?? 'Customer')))
+                ->filter()
+                ->take(2)
+                ->map(fn ($part) => strtoupper(substr($part, 0, 1)))
+                ->implode('')
+            : 'C'
+    )
 
     <div class="cp-topbar">
         <div class="container d-flex justify-content-between align-items-center">
@@ -81,7 +90,11 @@
 
                         <div class="dropdown">
                             <button class="cp-profile-btn dropdown-toggle" data-toggle="dropdown" type="button">
-                                <img src="{{ $customer && $customer->photo ? asset('uploads/customers/' . $customer->photo) : asset('assets/images/user.jpg') }}" alt="Profile">
+                                @if ($customer && $customer->photo)
+                                    <img src="{{ asset('uploads/customers/' . $customer->photo) }}" alt="Profile">
+                                @else
+                                    <span class="cp-avatar" aria-hidden="true">{{ $customerInitials ?: 'C' }}</span>
+                                @endif
                                 <span>{{ $customer->name ?? 'Customer' }}</span>
                             </button>
                             <div class="dropdown-menu dropdown-menu-right">

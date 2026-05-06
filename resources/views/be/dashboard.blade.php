@@ -37,7 +37,14 @@
               <div class="d-flex justify-content-between align-items-start mb-2">
                 <div>
                   <div class="text-muted small text-uppercase dashboard-kpi-label">{{ $card['label'] }}</div>
-                  <h3 class="mb-1 dashboard-kpi-value">{{ $card['value'] }}</h3>
+                  @if (str_starts_with($card['value'], 'Rp '))
+                    <div class="mb-1 dashboard-kpi-money">
+                      <span class="dashboard-kpi-money-prefix">Rp</span>
+                      <span class="dashboard-kpi-money-value">{{ str_replace('Rp ', '', $card['value']) }}</span>
+                    </div>
+                  @else
+                    <h3 class="mb-1 dashboard-kpi-value">{{ $card['value'] }}</h3>
+                  @endif
                 </div>
                 <span class="badge badge-{{ $card['tone'] === 'success' ? 'success' : ($card['tone'] === 'warning' ? 'warning' : ($card['tone'] === 'danger' ? 'danger' : 'primary')) }}">{{ strtoupper($card['tone']) }}</span>
               </div>
@@ -49,16 +56,19 @@
     </div>
 
     <div class="row">
-      <div class="col-lg-5 grid-margin stretch-card">
-        <div class="card shadow-sm border-0">
+      <div class="col-xl-6 grid-margin stretch-card">
+        <div class="card shadow-sm border-0 dashboard-section-card">
           <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <h4 class="card-title mb-0">Operational Alerts</h4>
+            <div class="d-flex justify-content-between align-items-center mb-3 dashboard-section-header">
+              <div>
+                <div class="dashboard-section-eyebrow">{{ $currentRole === \App\Models\User::ROLE_COURIER ? 'Prioritas Hari Ini' : 'Operational Alerts' }}</div>
+                <h4 class="card-title mb-0">{{ $currentRole === \App\Models\User::ROLE_COURIER ? 'Pantau assignment dan update sensitif' : 'Alert Operasional' }}</h4>
+              </div>
               <span class="badge badge-dark">{{ $alerts->count() }} alert</span>
             </div>
 
             @forelse ($alerts as $alert)
-              <div class="border rounded p-3 mb-3 bg-light">
+              <div class="border rounded p-3 mb-3 bg-light dashboard-alert-item">
                 <div class="d-flex justify-content-between align-items-start" style="gap:12px;">
                   <div>
                     <div class="font-weight-bold text-{{ $alert['tone'] }}">{{ $alert['title'] }}</div>
@@ -68,46 +78,60 @@
                 </div>
               </div>
             @empty
-              <div class="text-center py-4 text-muted">
-                Tidak ada alert kritikal. Operasional terlihat sehat.
+              <div class="dashboard-empty-state">
+                <div class="dashboard-empty-title">Tidak ada alert kritikal</div>
+                <div class="text-muted small">Operasional terlihat sehat{{ $currentRole === \App\Models\User::ROLE_COURIER ? '. Lanjutkan update perjalanan dan POD sesuai assignment.' : '.' }}</div>
               </div>
             @endforelse
           </div>
         </div>
       </div>
 
-      <div class="col-lg-7 grid-margin stretch-card">
-        <div class="card shadow-sm border-0">
+      <div class="col-xl-6 grid-margin stretch-card">
+        <div class="card shadow-sm border-0 dashboard-section-card">
           <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <h4 class="card-title mb-0">Performance Snapshot</h4>
-              <a href="{{ route('manager.reports') }}" class="btn btn-sm btn-outline-light {{ in_array($currentRole, ['admin','manager'], true) ? '' : 'disabled' }}">Report</a>
+            <div class="d-flex justify-content-between align-items-center mb-3 dashboard-section-header">
+              <div>
+                <div class="dashboard-section-eyebrow">Performance Snapshot</div>
+                <h4 class="card-title mb-0">{{ $currentRole === \App\Models\User::ROLE_COURIER ? 'Ringkasan kerja lapangan' : 'Ringkasan performa harian' }}</h4>
+              </div>
+              @if (in_array($currentRole, ['admin', 'manager'], true))
+                <a href="{{ route('manager.reports') }}" class="btn btn-sm btn-outline-light">Report</a>
+              @else
+                <span class="badge badge-info">LIVE</span>
+              @endif
             </div>
 
-            <div class="row">
+            <div class="row dashboard-summary-grid">
               <div class="col-md-6 mb-3">
-                <div class="border rounded p-3 h-100">
-                  <div class="text-muted small text-uppercase">Shipment Pipeline</div>
+                <div class="border rounded p-3 h-100 dashboard-mini-panel">
+                  <div class="text-muted small text-uppercase dashboard-mini-panel-title">Shipment Pipeline</div>
                   <div class="mt-2 d-flex justify-content-between"><span>Hari ini</span><strong>{{ number_format($stats['shipments_today']) }}</strong></div>
                   <div class="mt-2 d-flex justify-content-between"><span>In transit</span><strong>{{ number_format($stats['shipments_in_transit']) }}</strong></div>
                   <div class="mt-2 d-flex justify-content-between"><span>Delivered</span><strong>{{ number_format($stats['shipments_delivered']) }}</strong></div>
                 </div>
               </div>
               <div class="col-md-6 mb-3">
-                <div class="border rounded p-3 h-100">
-                  <div class="text-muted small text-uppercase">Payment Pipeline</div>
+                <div class="border rounded p-3 h-100 dashboard-mini-panel">
+                  <div class="text-muted small text-uppercase dashboard-mini-panel-title">{{ $currentRole === \App\Models\User::ROLE_COURIER ? 'Tracking Focus' : 'Payment Pipeline' }}</div>
+                  @if ($currentRole === \App\Models\User::ROLE_COURIER)
+                    <div class="mt-2 d-flex justify-content-between"><span>Tracking hari ini</span><strong>{{ number_format($stats['trackings_today']) }}</strong></div>
+                    <div class="mt-2 d-flex justify-content-between"><span>Shipment aktif</span><strong>{{ number_format($stats['shipments_in_transit']) }}</strong></div>
+                    <div class="mt-2 d-flex justify-content-between"><span>Paid hari ini</span><strong>Rp {{ number_format((float) $stats['payments_paid_today'], 0, ',', '.') }}</strong></div>
+                  @else
                   <div class="mt-2 d-flex justify-content-between"><span>Pending</span><strong>{{ number_format($stats['payments_waiting']) }}</strong></div>
                   <div class="mt-2 d-flex justify-content-between"><span>Failed</span><strong>{{ number_format($stats['payments_failed']) }}</strong></div>
                   <div class="mt-2 d-flex justify-content-between"><span>Paid hari ini</span><strong>Rp {{ number_format((float) $stats['payments_paid_today'], 0, ',', '.') }}</strong></div>
+                  @endif
                 </div>
               </div>
               <div class="col-12">
-                <div class="border rounded p-3">
-                  <div class="text-muted small text-uppercase mb-2">Activity Today</div>
-                  <div class="row">
-                    <div class="col-md-4 mb-2"><strong>{{ number_format($stats['trackings_today']) }}</strong><div class="small text-muted">tracking update</div></div>
-                    <div class="col-md-4 mb-2"><strong>{{ number_format($stats['shipments_today']) }}</strong><div class="small text-muted">shipment dibuat</div></div>
-                    <div class="col-md-4 mb-2"><strong>{{ number_format($stats['shipments_delivered']) }}</strong><div class="small text-muted">shipment delivered</div></div>
+                <div class="border rounded p-3 dashboard-mini-panel">
+                  <div class="text-muted small text-uppercase mb-3 dashboard-mini-panel-title">Activity Today</div>
+                  <div class="dashboard-activity-grid">
+                    <div class="dashboard-activity-item"><strong>{{ number_format($stats['trackings_today']) }}</strong><div class="small text-muted">tracking update</div></div>
+                    <div class="dashboard-activity-item"><strong>{{ number_format($stats['shipments_today']) }}</strong><div class="small text-muted">shipment dibuat</div></div>
+                    <div class="dashboard-activity-item"><strong>{{ number_format($stats['shipments_delivered']) }}</strong><div class="small text-muted">shipment delivered</div></div>
                   </div>
                 </div>
               </div>
@@ -119,9 +143,9 @@
 
     <div class="row">
       <div class="col-lg-6 grid-margin stretch-card">
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-sm border-0 dashboard-section-card">
           <div class="card-body">
-            <div class="d-flex justify-content-between mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3 dashboard-section-header">
               <h4 class="card-title mb-0">Shipment Terbaru</h4>
               <a href="{{ route('shipments.index') }}" class="btn btn-sm btn-outline-light">Lihat</a>
             </div>
@@ -149,9 +173,9 @@
       </div>
 
       <div class="col-lg-6 grid-margin stretch-card">
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-sm border-0 dashboard-section-card">
           <div class="card-body">
-            <div class="d-flex justify-content-between mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3 dashboard-section-header">
               <h4 class="card-title mb-0">{{ $currentRole === \App\Models\User::ROLE_COURIER ? 'Tracking Terbaru' : 'Payment Terbaru' }}</h4>
               <a href="{{ $currentRole === \App\Models\User::ROLE_COURIER ? route('shipment-trackings.index') : route('payments.index') }}" class="btn btn-sm btn-outline-light">Lihat</a>
             </div>
@@ -199,9 +223,9 @@
     @if ($currentRole !== \App\Models\User::ROLE_COURIER)
     <div class="row">
       <div class="col-12 grid-margin stretch-card">
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-sm border-0 dashboard-section-card">
           <div class="card-body">
-            <div class="d-flex justify-content-between mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3 dashboard-section-header">
               <h4 class="card-title mb-0">Tracking Terbaru</h4>
               <a href="{{ route('shipment-trackings.index') }}" class="btn btn-sm btn-outline-light">Lihat</a>
             </div>

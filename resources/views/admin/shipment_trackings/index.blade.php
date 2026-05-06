@@ -124,6 +124,12 @@
                     @if ($tracking->proof_photo)
                       <div class="font-weight-bold text-success">Bukti tersedia</div>
                       <div class="small text-muted">{{ $tracking->received_by ?: 'Penerima tidak dicatat' }}</div>
+                      <div class="mt-2">
+                        <img src="{{ asset('uploads/shipment-trackings/' . $tracking->proof_photo) }}" alt="POD {{ $tracking->shipment->tracking_number ?? '' }}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,.15);">
+                      </div>
+                      <div class="mt-2">
+                        <a href="{{ asset('uploads/shipment-trackings/' . $tracking->proof_photo) }}" target="_blank" class="btn btn-sm btn-info">Lihat Foto</a>
+                      </div>
                     @else
                       <span class="text-muted">Belum ada bukti</span>
                     @endif

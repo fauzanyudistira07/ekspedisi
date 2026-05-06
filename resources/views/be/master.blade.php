@@ -44,6 +44,12 @@
                 ['label' => 'Payment', 'route' => route('payments.index')],
             ],
         };
+        $userName = Auth::user()->name ?? 'User';
+        $userInitials = collect(preg_split('/\s+/', trim($userName)))
+            ->filter()
+            ->take(2)
+            ->map(fn ($part) => strtoupper(substr($part, 0, 1)))
+            ->implode('');
     @endphp
 
     <div class="cp-topbar">
@@ -85,15 +91,6 @@
                         @endforeach
                     </nav>
                 </div>
-
-                <div class="cp-sidebar-footer">
-                    <div class="cp-sidebar-footer-title">{{ $role === 'courier' ? 'Mode Kerja' : 'Portal Status' }}</div>
-                    <div class="cp-sidebar-footer-copy">
-                        {{ $role === 'courier'
-                            ? 'Fokus pada assignment, update lokasi, dan bukti serah terima.'
-                            : 'Kelola operasional, data, dan monitoring sesuai hak akses role.' }}
-                    </div>
-                </div>
             </div>
         </aside>
 
@@ -111,8 +108,8 @@
                     </div>
                     <div class="dropdown">
                         <button class="cp-profile-btn dropdown-toggle" data-toggle="dropdown" type="button">
-                            <img src="{{ asset('assets/images/user.jpg') }}" alt="Profile">
-                            <span>{{ Auth::user()->name ?? 'User' }}</span>
+                            <span class="cp-avatar" aria-hidden="true">{{ $userInitials ?: 'U' }}</span>
+                            <span>{{ $userName }}</span>
                         </button>
                         <div class="dropdown-menu dropdown-menu-right">
                             <div class="dropdown-item-text cp-muted-small">Role: {{ strtoupper($role ?? '-') }}</div>
@@ -130,13 +127,18 @@
                 @yield('content')
             </main>
 
-            <footer class="py-4 border-top" style="background:#fff; border-color:#dbe4f0 !important;">
-                <div class="container d-flex flex-column flex-md-row justify-content-between align-items-md-center">
-                    <p class="mb-2 mb-md-0 cp-muted-small">&copy; {{ date('Y') }} Ekspedisi Online Internal. Operasional real-time per role.</p>
-                    <div class="cp-muted-small">
-                        @foreach ($footerLinks as $link)
-                            <a href="{{ $link['route'] }}" class="{{ !$loop->last ? 'mr-3' : '' }}">{{ $link['label'] }}</a>
-                        @endforeach
+            <footer class="cp-app-footer">
+                <div class="container">
+                    <div class="cp-app-footer-card">
+                        <div>
+                            <div class="cp-app-footer-title">{{ $portalLabel }}</div>
+                            <p class="mb-0 cp-app-footer-copy">&copy; {{ date('Y') }} Ekspedisi Online Internal. Operasional real-time yang disesuaikan per role.</p>
+                        </div>
+                        <div class="cp-app-footer-links">
+                            @foreach ($footerLinks as $link)
+                                <a href="{{ $link['route'] }}">{{ $link['label'] }}</a>
+                            @endforeach
+                        </div>
                     </div>
                 </div>
             </footer>
@@ -148,5 +150,6 @@
     <script src="{{ asset('assets/lib/easing/easing.min.js') }}"></script>
     <script src="{{ asset('assets/lib/waypoints/waypoints.min.js') }}"></script>
     <script src="{{ asset('assets/js/main.js') }}"></script>
+    @stack('scripts')
 </body>
 </html>

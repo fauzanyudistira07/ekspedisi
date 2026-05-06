@@ -182,7 +182,7 @@
                     <div class="bg-secondary" style="padding: 30px;">
                         <div class="d-flex mb-3">
                             <div class="d-flex align-items-center">
-                                <img class="rounded-circle" style="width: 40px; height: 40px;" src="{{ asset('assets/images/user.jpg') }}" alt="">
+                                <span class="cp-avatar cp-avatar-sm" aria-hidden="true">JD</span>
                                 <a class="text-muted ml-2" href="blog">John Doe</a>
                             </div>
                             <div class="d-flex align-items-center ml-4">
@@ -207,7 +207,7 @@
                     <div class="bg-secondary" style="padding: 30px;">
                         <div class="d-flex mb-3">
                             <div class="d-flex align-items-center">
-                                <img class="rounded-circle" style="width: 40px; height: 40px;" src="{{ asset('assets/images/user.jpg') }}" alt="">
+                                <span class="cp-avatar cp-avatar-sm" aria-hidden="true">JD</span>
                                 <a class="text-muted ml-2" href="blog">John Doe</a>
                             </div>
                             <div class="d-flex align-items-center ml-4">

@@ -37,13 +37,6 @@ return [
         'roles' => ['admin', 'manager', 'courier'],
     ],
     [
-        'label' => 'Manifests',
-        'icon' => 'mdi mdi-truck-fast-outline',
-        'route' => 'manifests.index',
-        'group' => 'Operasional',
-        'roles' => ['admin', 'manager'],
-    ],
-    [
         'label' => 'Payments',
         'icon' => 'mdi mdi-cash-multiple',
         'route' => 'payments.index',

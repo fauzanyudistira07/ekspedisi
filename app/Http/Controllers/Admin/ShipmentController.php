@@ -11,6 +11,7 @@ use App\Models\Shipment;
 use App\Models\User;
 use App\Support\AuditLogger;
 use App\Support\Uploads;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
@@ -64,6 +65,11 @@ class ShipmentController extends Controller
                     Shipment::STATUS_FAILED_DELIVERY,
                 ])->count(),
                 'delivered' => (clone $summaryBaseQuery)->where('status', Shipment::STATUS_DELIVERED)->count(),
+                'exception' => (clone $summaryBaseQuery)->whereIn('status', [
+                    Shipment::STATUS_FAILED_DELIVERY,
+                    Shipment::STATUS_EXCEPTION_HOLD,
+                    Shipment::STATUS_RETURNED_TO_SENDER,
+                ])->count(),
             ],
             'filters' => [
                 'q' => $search,
@@ -142,8 +148,23 @@ class ShipmentController extends Controller
 
         return view('admin.shipments.show', [
             'title' => 'Shipment Detail',
-            'shipment' => $shipment->load(['sender', 'receiver', 'courier', 'originBranch', 'destinationBranch', 'rate', 'items', 'trackings.branch', 'payment', 'manifests.branch', 'manifests.vehicle', 'auditLogs.actor']),
+            'shipment' => $shipment->load(['sender', 'receiver', 'courier', 'originBranch', 'destinationBranch', 'rate', 'items', 'trackings.branch', 'payment', 'auditLogs.actor']),
         ]);
+    }
+
+    public function label(Shipment $shipment)
+    {
+        $this->ensureTablePermission('shipments', 'read');
+        $this->ensureShipmentVisibility($shipment);
+
+        $shipment->load(['sender', 'receiver', 'originBranch', 'destinationBranch', 'courier', 'items']);
+
+        $pdf = Pdf::loadView('admin.shipments.label', [
+            'shipment' => $shipment,
+            'barcodeRows' => $this->buildLabelBarcodeRows($shipment->tracking_number),
+        ])->setPaper([0, 0, 283.46, 425.2]);
+
+        return $pdf->stream('label-' . $shipment->tracking_number . '.pdf');
     }
 
     public function edit(Shipment $shipment)
@@ -249,5 +270,17 @@ class ShipmentController extends Controller
         }
 
         return round($totalWeight * (float) $rate->price_per_kg, 2);
+    }
+
+    private function buildLabelBarcodeRows(string $trackingNumber): array
+    {
+        $rows = [];
+
+        foreach (str_split($trackingNumber) as $character) {
+            $binary = str_pad(decbin(ord($character)), 8, '0', STR_PAD_LEFT);
+            $rows[] = str_replace(['0', '1'], ['1', '3'], $binary);
+        }
+
+        return $rows;
     }
 }
