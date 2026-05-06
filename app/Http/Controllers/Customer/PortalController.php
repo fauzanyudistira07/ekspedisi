@@ -51,10 +51,7 @@ class PortalController extends Controller
                 'delivered' => (clone $baseQuery)->where('status', Shipment::STATUS_DELIVERED)->count(),
                 'need_payment' => Payment::whereHas('shipment', function ($query) use ($customerId) {
                     $query->where('sender_id', $customerId);
-                })->whereIn('payment_status', [
-                    Payment::STATUS_PENDING,
-                    Payment::STATUS_WAITING_VERIFICATION,
-                ])->count(),
+                })->where('payment_status', Payment::STATUS_PENDING)->count(),
                 'address_book' => $addressCount,
             ],
             'recentShipments' => (clone $baseQuery)
@@ -65,7 +62,7 @@ class PortalController extends Controller
             'workflow' => [
                 'Buat Shipment: Isi data penerima, cabang asal/tujuan, item, dan jadwal kirim.',
                 'Cek Resi: Sistem akan membuat nomor resi otomatis setelah shipment tersimpan.',
-                'Bayar Kiriman: Pilih metode pembayaran dan unggah bukti transfer/e-wallet untuk verifikasi cepat.',
+                'Bayar Kiriman: Buka checkout Midtrans dan pilih kanal pembayaran yang tersedia.',
                 'Pantau Tracking: Lihat update status hingga paket delivered.',
             ],
             'quickActions' => [

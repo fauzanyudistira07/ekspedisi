@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Payment;
 use App\Models\Shipment;
+use App\Models\ShipmentManifest;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -37,8 +38,8 @@ class ManagerReportController extends Controller
             });
 
         $paymentQuery = Payment::query()
-            ->whereDate('payment_date', '>=', $dateFromString)
-            ->whereDate('payment_date', '<=', $dateToString)
+            ->whereDate('created_at', '>=', $dateFromString)
+            ->whereDate('created_at', '<=', $dateToString)
             ->when($branchId, function ($query) use ($branchId) {
                 $query->whereHas('shipment', function ($subQuery) use ($branchId) {
                     $subQuery->where(function ($innerQuery) use ($branchId) {
@@ -61,11 +62,17 @@ class ManagerReportController extends Controller
                 + ($statusCounts[Shipment::STATUS_ARRIVED_AT_BRANCH] ?? 0)
                 + ($statusCounts[Shipment::STATUS_OUT_FOR_DELIVERY] ?? 0)),
             'cancelled' => (int) ($statusCounts[Shipment::STATUS_CANCELLED] ?? 0),
+            'exceptions' => (int) (($statusCounts[Shipment::STATUS_FAILED_DELIVERY] ?? 0)
+                + ($statusCounts[Shipment::STATUS_EXCEPTION_HOLD] ?? 0)
+                + ($statusCounts[Shipment::STATUS_RETURNED_TO_SENDER] ?? 0)),
             'paid_amount' => (float) (clone $paymentQuery)->where('payment_status', Payment::STATUS_PAID)->sum('amount'),
-            'waiting_payment' => (int) (clone $paymentQuery)
-                ->whereIn('payment_status', [Payment::STATUS_PENDING, Payment::STATUS_WAITING_VERIFICATION])
-                ->count(),
+            'waiting_payment' => (int) (clone $paymentQuery)->where('payment_status', Payment::STATUS_PENDING)->count(),
             'failed_payment' => (int) (clone $paymentQuery)->where('payment_status', Payment::STATUS_FAILED)->count(),
+            'manifests' => ShipmentManifest::query()
+                ->whereDate('created_at', '>=', $dateFromString)
+                ->whereDate('created_at', '<=', $dateToString)
+                ->when($branchId, fn ($query) => $query->where('branch_id', $branchId))
+                ->count(),
         ];
 
         $branchPerformance = Branch::query()

@@ -9,8 +9,11 @@ use App\Models\Customer;
 use App\Models\Rate;
 use App\Models\Shipment;
 use App\Models\User;
+use App\Support\AuditLogger;
+use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 
 class ShipmentController extends Controller
@@ -43,9 +46,25 @@ class ShipmentController extends Controller
             ->paginate(10)
             ->withQueryString();
 
+        $summaryBaseQuery = Shipment::query()
+            ->when($user->role === User::ROLE_COURIER, fn ($query) => $query->where('courier_id', $user->id));
+
         return view('admin.shipments.index', [
             'title' => 'Shipments',
             'shipments' => $shipments,
+            'summary' => [
+                'total' => (clone $summaryBaseQuery)->count(),
+                'pending' => (clone $summaryBaseQuery)->where('status', Shipment::STATUS_PENDING)->count(),
+                'in_transit' => (clone $summaryBaseQuery)->whereIn('status', [
+                    Shipment::STATUS_PICKED_UP,
+                    Shipment::STATUS_IN_TRANSIT,
+                    Shipment::STATUS_ARRIVED_AT_BRANCH,
+                    Shipment::STATUS_OUT_FOR_DELIVERY,
+                    Shipment::STATUS_EXCEPTION_HOLD,
+                    Shipment::STATUS_FAILED_DELIVERY,
+                ])->count(),
+                'delivered' => (clone $summaryBaseQuery)->where('status', Shipment::STATUS_DELIVERED)->count(),
+            ],
             'filters' => [
                 'q' => $search,
                 'status' => $status,
@@ -86,19 +105,32 @@ class ShipmentController extends Controller
             ],
             'rate_id' => 'required|exists:rates,id',
             'total_weight' => 'required|numeric|min:0.01',
-            'total_price' => 'required|numeric|min:0',
             'status' => ['required', Rule::in(Shipment::statuses())],
             'shipment_date' => 'required|date',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
+        $validated['total_price'] = $this->resolveTotalPrice(
+            $validated['origin_branch_id'],
+            $validated['destination_branch_id'],
+            $validated['rate_id'],
+            (float) $validated['total_weight'],
+        );
+
         if ($request->hasFile('photo')) {
-            $photoName = time() . '_' . $request->file('photo')->getClientOriginalName();
-            $request->file('photo')->move(public_path('uploads/shipments'), $photoName);
-            $validated['photo'] = $photoName;
+            $validated['photo'] = Uploads::storePublic($request->file('photo'), 'shipments');
         }
 
-        Shipment::create($validated);
+        $shipment = Shipment::create($validated);
+        AuditLogger::log($shipment, 'shipment.created', 'Shipment ' . $shipment->tracking_number . ' dibuat.', null, $shipment->only([
+            'tracking_number',
+            'status',
+            'origin_branch_id',
+            'destination_branch_id',
+            'courier_id',
+            'total_weight',
+            'total_price',
+        ]));
 
         return redirect()->route('shipments.index')->with('success', 'Shipment berhasil ditambahkan.');
     }
@@ -110,7 +142,7 @@ class ShipmentController extends Controller
 
         return view('admin.shipments.show', [
             'title' => 'Shipment Detail',
-            'shipment' => $shipment->load(['sender', 'receiver', 'courier', 'originBranch', 'destinationBranch', 'rate', 'items', 'trackings', 'payment']),
+            'shipment' => $shipment->load(['sender', 'receiver', 'courier', 'originBranch', 'destinationBranch', 'rate', 'items', 'trackings.branch', 'payment', 'manifests.branch', 'manifests.vehicle', 'auditLogs.actor']),
         ]);
     }
 
@@ -147,19 +179,32 @@ class ShipmentController extends Controller
             ],
             'rate_id' => 'required|exists:rates,id',
             'total_weight' => 'required|numeric|min:0.01',
-            'total_price' => 'required|numeric|min:0',
             'status' => ['required', Rule::in(Shipment::statuses())],
             'shipment_date' => 'required|date',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
+        $validated['total_price'] = $this->resolveTotalPrice(
+            $validated['origin_branch_id'],
+            $validated['destination_branch_id'],
+            $validated['rate_id'],
+            (float) $validated['total_weight'],
+        );
+
         if ($request->hasFile('photo')) {
-            $photoName = time() . '_' . $request->file('photo')->getClientOriginalName();
-            $request->file('photo')->move(public_path('uploads/shipments'), $photoName);
-            $validated['photo'] = $photoName;
+            $validated['photo'] = Uploads::storePublic($request->file('photo'), 'shipments');
         }
 
+        $oldValues = $shipment->only(['status', 'courier_id', 'origin_branch_id', 'destination_branch_id', 'total_weight', 'total_price']);
         $shipment->update($validated);
+        AuditLogger::log($shipment, 'shipment.updated', 'Shipment ' . $shipment->tracking_number . ' diperbarui.', $oldValues, $shipment->only([
+            'status',
+            'courier_id',
+            'origin_branch_id',
+            'destination_branch_id',
+            'total_weight',
+            'total_price',
+        ]));
 
         return redirect()->route('shipments.index')->with('success', 'Shipment berhasil diperbarui.');
     }
@@ -180,5 +225,29 @@ class ShipmentController extends Controller
         if ($user && $user->role === User::ROLE_COURIER && $shipment->courier_id !== $user->id) {
             abort(403, 'Anda tidak memiliki akses ke shipment ini.');
         }
+    }
+
+    private function resolveTotalPrice(int $originBranchId, int $destinationBranchId, int $rateId, float $totalWeight): float
+    {
+        $originBranch = Branch::findOrFail($originBranchId);
+        $destinationBranch = Branch::findOrFail($destinationBranchId);
+        $rate = Rate::findOrFail($rateId);
+
+        if ($originBranch->id === $destinationBranch->id) {
+            throw ValidationException::withMessages([
+                'destination_branch_id' => 'Cabang asal dan tujuan tidak boleh sama.',
+            ]);
+        }
+
+        if (
+            strcasecmp((string) $originBranch->city, (string) $rate->origin_city) !== 0 ||
+            strcasecmp((string) $destinationBranch->city, (string) $rate->destination_city) !== 0
+        ) {
+            throw ValidationException::withMessages([
+                'rate_id' => 'Rate yang dipilih tidak sesuai dengan cabang asal/tujuan.',
+            ]);
+        }
+
+        return round($totalWeight * (float) $rate->price_per_kg, 2);
     }
 }

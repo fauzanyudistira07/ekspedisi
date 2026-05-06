@@ -19,4 +19,9 @@ class Vehicle extends Model
     {
         return $this->belongsTo(User::class, 'courier_id');
     }
+
+    public function manifests()
+    {
+        return $this->hasMany(ShipmentManifest::class);
+    }
 }

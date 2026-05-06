@@ -14,11 +14,19 @@ class ShipmentTracking extends Model
     public const STATUS_ARRIVED_AT_BRANCH = 'arrived_at_branch';
     public const STATUS_OUT_FOR_DELIVERY = 'out_for_delivery';
     public const STATUS_DELIVERED = 'delivered';
+    public const STATUS_FAILED_DELIVERY = 'failed_delivery';
+    public const STATUS_EXCEPTION_HOLD = 'exception_hold';
+    public const STATUS_RETURNED_TO_SENDER = 'returned_to_sender';
 
     protected $fillable = [
         'shipment_id',
+        'branch_id',
         'location',
         'description',
+        'checkpoint_type',
+        'received_by',
+        'receiver_relation',
+        'proof_photo',
         'status',
         'tracked_at',
     ];
@@ -32,6 +40,11 @@ class ShipmentTracking extends Model
         return $this->belongsTo(Shipment::class);
     }
 
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
     public static function statuses(): array
     {
         return [
@@ -40,6 +53,9 @@ class ShipmentTracking extends Model
             self::STATUS_ARRIVED_AT_BRANCH,
             self::STATUS_OUT_FOR_DELIVERY,
             self::STATUS_DELIVERED,
+            self::STATUS_FAILED_DELIVERY,
+            self::STATUS_EXCEPTION_HOLD,
+            self::STATUS_RETURNED_TO_SENDER,
         ];
     }
 
@@ -51,6 +67,9 @@ class ShipmentTracking extends Model
             self::STATUS_ARRIVED_AT_BRANCH => 'Tiba di Cabang Tujuan',
             self::STATUS_OUT_FOR_DELIVERY => 'Sedang Diantar',
             self::STATUS_DELIVERED => 'Terkirim',
+            self::STATUS_FAILED_DELIVERY => 'Gagal Antar',
+            self::STATUS_EXCEPTION_HOLD => 'Exception / Hold',
+            self::STATUS_RETURNED_TO_SENDER => 'Retur ke Pengirim',
         ];
     }
 
@@ -59,5 +78,10 @@ class ShipmentTracking extends Model
         $labels = self::statusLabels();
 
         return $labels[$status] ?? strtoupper(str_replace('_', ' ', (string) $status));
+    }
+
+    public function requiresDeliveryProof(): bool
+    {
+        return $this->status === self::STATUS_DELIVERED;
     }
 }

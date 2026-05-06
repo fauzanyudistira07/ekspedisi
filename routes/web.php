@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\ShipmentController;
 use App\Http\Controllers\Admin\ShipmentItemController;
 use App\Http\Controllers\Admin\ShipmentTrackingController;
 use App\Http\Controllers\Admin\PaymentController;
+use App\Http\Controllers\Admin\ManifestController;
 use App\Http\Controllers\Admin\ManagerReportController;
 use App\Http\Controllers\Admin\CourierTaskController;
 use App\Http\Controllers\Admin\CustomerController;
@@ -21,6 +22,7 @@ use App\Http\Controllers\Customer\AddressController as CustomerAddressController
 use App\Http\Controllers\Customer\ShipmentController as CustomerShipmentController;
 use App\Http\Controllers\Customer\PaymentController as CustomerPaymentController;
 use App\Http\Controllers\Customer\ProfileController as CustomerProfileController;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 
 Route::get('/', function () {
     return redirect()->route('login');
@@ -28,6 +30,9 @@ Route::get('/', function () {
 
 Route::get('/track', [TrackingController::class, 'index'])->name('track.index');
 Route::post('/track', [TrackingController::class, 'search'])->name('track.search');
+Route::post('/midtrans/notification', [CustomerPaymentController::class, 'notification'])
+    ->withoutMiddleware([VerifyCsrfToken::class])
+    ->name('midtrans.notification');
 
 // ======================
 // HALAMAN UNTUK GUEST
@@ -59,10 +64,8 @@ Route::middleware(['auth', 'role:admin,cashier,courier,manager'])->group(functio
     Route::resource('/shipments', ShipmentController::class);
     Route::resource('/shipment-items', ShipmentItemController::class)->except(['show']);
     Route::resource('/shipment-trackings', ShipmentTrackingController::class)->except(['show']);
+    Route::resource('/manifests', ManifestController::class)->only(['index', 'create', 'store', 'show']);
     Route::resource('/payments', PaymentController::class)->except(['show']);
-    Route::get('/payments-verification', [PaymentController::class, 'verificationQueue'])->name('payments.verification');
-    Route::patch('/payments/{payment}/verify', [PaymentController::class, 'verify'])->name('payments.verify');
-    Route::patch('/payments/{payment}/reject', [PaymentController::class, 'reject'])->name('payments.reject');
     Route::get('/manager-reports', [ManagerReportController::class, 'index'])->name('manager.reports');
     Route::get('/manager-reports/export', [ManagerReportController::class, 'export'])->name('manager.reports.export');
     Route::get('/courier-tasks', [CourierTaskController::class, 'index'])->name('courier.tasks');
@@ -98,6 +101,8 @@ Route::middleware('auth:customer')->group(function () {
     Route::resource('/customer-payments', CustomerPaymentController::class)
         ->only(['index', 'create', 'store'])
         ->names('customer.payments');
+    Route::get('/customer-payments/{customer_payment}/checkout', [CustomerPaymentController::class, 'checkout'])->name('customer.payments.checkout');
+    Route::get('/customer-payments/{customer_payment}/result', [CustomerPaymentController::class, 'result'])->name('customer.payments.result');
     Route::get('/customer-payments/{customer_payment}/invoice', [CustomerPaymentController::class, 'invoice'])->name('customer.payments.invoice');
 
     Route::get('/profile', [CustomerProfileController::class, 'edit'])->name('customer.profile.edit');

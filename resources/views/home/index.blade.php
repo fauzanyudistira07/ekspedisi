@@ -9,7 +9,7 @@
                 <p class="mb-4">Semua kebutuhan pengiriman ada di satu tempat: buat shipment, bayar, dan pantau tracking secara real-time.</p>
                 <div class="d-flex flex-wrap" style="gap:10px;">
                     <a href="{{ route('customer.shipments.create') }}" class="btn btn-warning text-dark font-weight-bold">Buat Shipment</a>
-                    <a href="{{ route('customer.payments.create') }}" class="btn btn-light">Buat Payment</a>
+                    <a href="{{ route('customer.payments.create') }}" class="btn btn-light">Bayar via Midtrans</a>
                 </div>
             </div>
             <div class="col-lg-4 mt-4 mt-lg-0">
@@ -46,7 +46,7 @@
         </div>
         <div class="col-6 col-lg-3 mb-3">
             <div class="cp-stat">
-                <span class="cp-muted-small">Perlu Verifikasi Bayar</span>
+                <span class="cp-muted-small">Pending Pembayaran</span>
                 <span class="value">{{ $stats['need_payment'] }}</span>
             </div>
         </div>

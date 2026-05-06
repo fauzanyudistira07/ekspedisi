@@ -5,11 +5,29 @@
   <div class="content-wrapper">
     @include('admin.partials.alerts')
 
-    <div class="card mb-4">
+    <div class="card mb-4 border-0 shadow-sm page-hero page-hero--courier">
+      <div class="card-body py-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-start" style="gap:16px;">
+          <div class="page-hero-copy">
+            <div class="text-uppercase small mb-2 page-hero-eyebrow">Courier Workspace</div>
+            <h4 class="mb-2 page-hero-title">Tugas pengantaran dan update perjalanan paket</h4>
+            <p class="mb-0 page-hero-text">Kurir cukup fokus pada assignment, update lokasi, status paket, dan bukti serah terima ketika delivered.</p>
+          </div>
+          <div class="d-flex flex-wrap" style="gap:8px;">
+            <a href="{{ route('shipments.index') }}" class="btn btn-warning text-dark">Shipment Saya</a>
+            <a href="{{ route('shipment-trackings.index') }}" class="btn btn-outline-light">Riwayat Tracking</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-4 border-0 shadow-sm">
       <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-center mb-3" style="gap:10px;">
-          <h4 class="card-title mb-0">Courier Tasks</h4>
-          <a href="{{ route('shipment-trackings.index') }}" class="btn btn-outline-light btn-sm">Riwayat Tracking</a>
+          <div>
+            <h4 class="card-title mb-1">Task Kurir</h4>
+            <div class="small text-muted">Cari assignment aktif lalu lakukan update status langsung dari halaman ini.</div>
+          </div>
         </div>
 
         <form method="GET" action="{{ route('courier.tasks') }}">
@@ -45,14 +63,20 @@
     </div>
 
     <div class="row">
-      <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">Assigned Total</h6><h3>{{ number_format($summary['assigned_total']) }}</h3></div></div></div>
-      <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">Assigned Hari Ini</h6><h3>{{ number_format($summary['today_assigned']) }}</h3></div></div></div>
-      <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">Task Aktif</h6><h3>{{ number_format($summary['active']) }}</h3></div></div></div>
-      <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">Delivered</h6><h3>{{ number_format($summary['delivered']) }}</h3></div></div></div>
+      <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card border-0 shadow-sm"><div class="card-body"><h6 class="text-muted dashboard-kpi-label">Assigned Total</h6><h3>{{ number_format($summary['assigned_total']) }}</h3><div class="small text-muted">Total paket yang pernah diassign</div></div></div></div>
+      <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card border-0 shadow-sm"><div class="card-body"><h6 class="text-muted dashboard-kpi-label">Assigned Hari Ini</h6><h3>{{ number_format($summary['today_assigned']) }}</h3><div class="small text-muted">Task masuk pada hari ini</div></div></div></div>
+      <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card border-0 shadow-sm"><div class="card-body"><h6 class="text-muted dashboard-kpi-label">Task Aktif</h6><h3>{{ number_format($summary['active']) }}</h3><div class="small text-muted">Paket yang masih harus diupdate</div></div></div></div>
+      <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card border-0 shadow-sm"><div class="card-body"><h6 class="text-muted dashboard-kpi-label">Delivered</h6><h3>{{ number_format($summary['delivered']) }}</h3><div class="small text-muted">Task yang sudah selesai</div></div></div></div>
     </div>
 
-    <div class="card">
+    <div class="card border-0 shadow-sm">
       <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3" style="gap:12px;">
+          <div>
+            <h4 class="card-title mb-1">Assignment Aktif</h4>
+            <div class="small text-muted">Setiap update akan langsung membuat tracking baru dan mengubah status shipment.</div>
+          </div>
+        </div>
         <div class="table-responsive">
           <table class="table table-dark table-striped">
             <thead>
@@ -81,34 +105,52 @@
                     <div>Kurir: {{ $shipment->courier->name ?? '-' }}</div>
                     <small>Receiver: {{ $shipment->receiver->name ?? '-' }}</small>
                   </td>
-                  <td>{{ \App\Models\Shipment::statusLabel($shipment->status) }}</td>
+                  <td><span class="badge badge-{{ $shipment->status === \App\Models\Shipment::STATUS_DELIVERED ? 'success' : ($shipment->status === \App\Models\Shipment::STATUS_PENDING ? 'warning' : 'primary') }}">{{ \App\Models\Shipment::statusLabel($shipment->status) }}</span></td>
                   <td>
                     @if ($lastTracking)
                       <div>{{ \App\Models\ShipmentTracking::statusLabel($lastTracking->status) }}</div>
                       <small>{{ $lastTracking->location }} - {{ $lastTracking->tracked_at?->format('Y-m-d H:i') }}</small>
+                      <div class="mt-2">
+                        <a href="{{ route('shipment-trackings.edit', $lastTracking) }}" class="btn btn-sm btn-outline-light">Edit Tracking Terakhir</a>
+                      </div>
                     @else
                       <small>Belum ada tracking.</small>
+                      <div class="mt-2">
+                        <a href="{{ route('shipment-trackings.create', ['shipment_id' => $shipment->id]) }}" class="btn btn-sm btn-outline-light">Buat Tracking Pertama</a>
+                      </div>
                     @endif
                   </td>
                   <td style="min-width:280px;">
                     @if (empty($nextStatuses))
                       <span class="text-success">Task selesai.</span>
                     @else
-                      <form method="POST" action="{{ route('courier.tasks.update-status', $shipment) }}">
+                      <form method="POST" action="{{ route('courier.tasks.update-status', $shipment) }}" enctype="multipart/form-data" class="courier-quick-form">
                         @csrf
                         @method('PATCH')
                         <div class="mb-1">
-                          <select name="status" class="form-control form-control-sm" required>
+                          <select name="status" class="form-control form-control-sm js-courier-status" required>
                             @foreach($nextStatuses as $status)
                               <option value="{{ $status }}">{{ \App\Models\Shipment::statusLabel($status) }}</option>
                             @endforeach
                           </select>
                         </div>
                         <div class="mb-1">
-                          <input type="text" name="location" class="form-control form-control-sm" placeholder="Lokasi update (contoh: Gudang Bandung)" required>
+                          <input type="text" name="location" class="form-control form-control-sm" value="{{ old('location', $lastTracking->location ?? '') }}" placeholder="Lokasi update (contoh: Gudang Bandung)" required>
                         </div>
                         <div class="mb-1">
-                          <input type="text" name="description" class="form-control form-control-sm" placeholder="Deskripsi singkat update">
+                          <input type="text" name="description" class="form-control form-control-sm" value="{{ old('description', $lastTracking->description ?? '') }}" placeholder="Deskripsi singkat update">
+                        </div>
+                        <div class="courier-proof-fields" style="display:none;">
+                          <div class="mb-1">
+                            <input type="text" name="received_by" class="form-control form-control-sm" placeholder="Diterima oleh">
+                          </div>
+                          <div class="mb-1">
+                            <input type="text" name="receiver_relation" class="form-control form-control-sm" placeholder="Hubungan penerima, contoh: keluarga / security">
+                          </div>
+                          <div class="mb-1">
+                            <input type="file" name="proof_photo" class="form-control form-control-sm" accept=".jpg,.jpeg,.png">
+                          </div>
+                          <small class="text-warning d-block mb-2">Bukti serah terima wajib saat status delivered.</small>
                         </div>
                         <button type="submit" class="btn btn-sm btn-primary btn-block">Update Status</button>
                       </form>
@@ -127,3 +169,25 @@
   </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+  document.querySelectorAll('form').forEach(function (form) {
+    const statusInput = form.querySelector('.js-courier-status');
+    const proofFields = form.querySelector('.courier-proof-fields');
+
+    if (!statusInput || !proofFields) {
+      return;
+    }
+
+    function toggleProofFields() {
+      proofFields.style.display = statusInput.value === 'delivered' ? '' : 'none';
+    }
+
+    statusInput.addEventListener('change', toggleProofFields);
+    toggleProofFields();
+  });
+})();
+</script>
+@endpush

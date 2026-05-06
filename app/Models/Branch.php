@@ -30,4 +30,9 @@ class Branch extends Model
     {
         return $this->hasMany(Shipment::class, 'destination_branch_id');
     }
+
+    public function manifests()
+    {
+        return $this->hasMany(ShipmentManifest::class);
+    }
 }

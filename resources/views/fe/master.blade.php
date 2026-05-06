@@ -88,7 +88,7 @@
                                 <a href="{{ route('customer.profile.edit') }}" class="dropdown-item">Profil Saya</a>
                                 <a href="{{ route('customer.addresses.index') }}" class="dropdown-item">Address Book</a>
                                 <a href="{{ route('customer.shipments.create') }}" class="dropdown-item">Buat Shipment</a>
-                                <a href="{{ route('customer.payments.create') }}" class="dropdown-item">Buat Payment</a>
+                                <a href="{{ route('customer.payments.create') }}" class="dropdown-item">Bayar via Midtrans</a>
                                 <div class="dropdown-divider"></div>
                                 <form action="{{ route('customer.logout') }}" method="POST">
                                     @csrf

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Customer;
 
 use App\Http\Controllers\Controller;
+use App\Support\Uploads;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\Request;
@@ -38,9 +39,7 @@ class ProfileController extends Controller
         }
 
         if ($request->hasFile('photo')) {
-            $photoName = time() . '_' . $request->file('photo')->getClientOriginalName();
-            $request->file('photo')->move(public_path('uploads/customers'), $photoName);
-            $validated['photo'] = $photoName;
+            $validated['photo'] = Uploads::storePublic($request->file('photo'), 'customers');
         }
 
         $customer->update($validated);

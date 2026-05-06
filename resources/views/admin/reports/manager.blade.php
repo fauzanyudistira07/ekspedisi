@@ -45,9 +45,11 @@
       <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">Delivered</h6><h3>{{ number_format($summary['delivered']) }}</h3></div></div></div>
       <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">In Transit</h6><h3>{{ number_format($summary['in_transit']) }}</h3></div></div></div>
       <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">Cancelled</h6><h3>{{ number_format($summary['cancelled']) }}</h3></div></div></div>
+      <div class="col-xl-3 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">Exception</h6><h3>{{ number_format($summary['exceptions']) }}</h3></div></div></div>
       <div class="col-xl-4 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">Total Paid</h6><h3>Rp {{ number_format($summary['paid_amount'], 0, ',', '.') }}</h3></div></div></div>
       <div class="col-xl-4 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">Waiting Payment</h6><h3>{{ number_format($summary['waiting_payment']) }}</h3></div></div></div>
       <div class="col-xl-4 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">Failed Payment</h6><h3>{{ number_format($summary['failed_payment']) }}</h3></div></div></div>
+      <div class="col-xl-4 col-md-6 grid-margin stretch-card"><div class="card"><div class="card-body"><h6 class="text-muted">Manifest Dibuat</h6><h3>{{ number_format($summary['manifests']) }}</h3></div></div></div>
     </div>
 
     <div class="row">

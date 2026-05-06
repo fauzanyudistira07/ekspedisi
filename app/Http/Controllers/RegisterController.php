@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
@@ -45,8 +46,7 @@ class RegisterController extends Controller
         $photoName = null;
 
         if ($request->hasFile('photo')) {
-            $photoName = time() . '_' . $request->file('photo')->getClientOriginalName();
-            $request->file('photo')->move(public_path('uploads/customers'), $photoName);
+            $photoName = Uploads::storePublic($request->file('photo'), 'customers');
         }
 
         Customer::create([

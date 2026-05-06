@@ -9,13 +9,14 @@ use App\Models\CustomerAddress;
 use App\Models\Rate;
 use App\Models\Shipment;
 use App\Models\ShipmentItem;
-use App\Models\ShipmentTracking;
+use App\Support\Uploads;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 
 class ShipmentController extends Controller
@@ -101,6 +102,12 @@ class ShipmentController extends Controller
             'shipment_photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
+        if ((int) $validated['origin_branch_id'] === (int) $validated['destination_branch_id']) {
+            return back()->withErrors([
+                'destination_branch_id' => 'Cabang asal dan tujuan tidak boleh sama.',
+            ])->withInput();
+        }
+
         if ($validated['receiver_mode'] === 'address' && empty($validated['address_id'])) {
             return back()->withErrors(['address_id' => 'Pilih alamat penerima dari address book.'])->withInput();
         }
@@ -154,6 +161,18 @@ class ShipmentController extends Controller
                 $totalWeight += ((float) $validated['quantity'][$idx] * (float) $validated['weight'][$idx]);
             }
             $rate = Rate::findOrFail($validated['rate_id']);
+            $originBranch = Branch::findOrFail($validated['origin_branch_id']);
+            $destinationBranch = Branch::findOrFail($validated['destination_branch_id']);
+
+            if (
+                strcasecmp((string) $originBranch->city, (string) $rate->origin_city) !== 0 ||
+                strcasecmp((string) $destinationBranch->city, (string) $rate->destination_city) !== 0
+            ) {
+                throw ValidationException::withMessages([
+                    'rate_id' => 'Rate yang dipilih tidak sesuai dengan cabang asal/tujuan.',
+                ]);
+            }
+
             $totalPrice = $totalWeight * (float) $rate->price_per_kg;
 
             $shipmentData = [
@@ -171,9 +190,7 @@ class ShipmentController extends Controller
             ];
 
             if ($request->hasFile('shipment_photo')) {
-                $photoName = time() . '_' . $request->file('shipment_photo')->getClientOriginalName();
-                $request->file('shipment_photo')->move(public_path('uploads/shipments'), $photoName);
-                $shipmentData['photo'] = $photoName;
+                $shipmentData['photo'] = Uploads::storePublic($request->file('shipment_photo'), 'shipments');
             }
 
             $shipment = Shipment::create($shipmentData);
@@ -188,21 +205,11 @@ class ShipmentController extends Controller
                 ];
 
                 if (!empty($itemPhotos[$idx])) {
-                    $itemPhoto = time() . '_item_' . $idx . '_' . $itemPhotos[$idx]->getClientOriginalName();
-                    $itemPhotos[$idx]->move(public_path('uploads/shipment-items'), $itemPhoto);
-                    $itemData['photo'] = $itemPhoto;
+                    $itemData['photo'] = Uploads::storePublic($itemPhotos[$idx], 'shipment-items', 'item_' . $idx);
                 }
 
                 ShipmentItem::create($itemData);
             }
-
-            ShipmentTracking::create([
-                'shipment_id' => $shipment->id,
-                'location' => $shipment->originBranch->city,
-                'description' => 'Order shipment dibuat oleh customer.',
-                'status' => ShipmentTracking::STATUS_PICKED_UP,
-                'tracked_at' => now(),
-            ]);
         });
 
         return redirect()->route('customer.shipments.index')->with('success', 'Shipment berhasil dibuat.');

@@ -9,11 +9,8 @@ class Payment extends Model
 {
     use HasFactory;
 
-    public const METHOD_CASH = 'cash';
-    public const METHOD_TRANSFER = 'transfer';
-    public const METHOD_E_WALLET = 'e-wallet';
+    public const METHOD_MIDTRANS = 'midtrans';
     public const STATUS_PENDING = 'pending';
-    public const STATUS_WAITING_VERIFICATION = 'waiting_verification';
     public const STATUS_PAID = 'paid';
     public const STATUS_FAILED = 'failed';
     public const STATUS_EXPIRED = 'expired';
@@ -22,22 +19,33 @@ class Payment extends Model
     protected $fillable = [
         'shipment_id',
         'amount',
+        'gateway_provider',
+        'gateway_order_id',
+        'gateway_transaction_id',
         'payment_method',
+        'payment_channel',
+        'snap_token',
+        'snap_redirect_url',
         'reference_number',
         'proof_file',
         'payment_status',
+        'midtrans_transaction_status',
         'payment_date',
+        'paid_at',
         'verified_at',
         'expired_at',
         'verified_by',
         'notes',
+        'gateway_payload',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'payment_date' => 'date',
+        'paid_at' => 'datetime',
         'verified_at' => 'datetime',
         'expired_at' => 'datetime',
+        'gateway_payload' => 'array',
     ];
 
     public function shipment()
@@ -53,9 +61,7 @@ class Payment extends Model
     public static function methods(): array
     {
         return [
-            self::METHOD_CASH,
-            self::METHOD_TRANSFER,
-            self::METHOD_E_WALLET,
+            self::METHOD_MIDTRANS,
         ];
     }
 
@@ -63,7 +69,6 @@ class Payment extends Model
     {
         return [
             self::STATUS_PENDING,
-            self::STATUS_WAITING_VERIFICATION,
             self::STATUS_PAID,
             self::STATUS_FAILED,
             self::STATUS_EXPIRED,
@@ -75,9 +80,8 @@ class Payment extends Model
     {
         return [
             self::STATUS_PENDING => 'Menunggu Pembayaran',
-            self::STATUS_WAITING_VERIFICATION => 'Menunggu Verifikasi',
             self::STATUS_PAID => 'Lunas',
-            self::STATUS_FAILED => 'Pembayaran Ditolak',
+            self::STATUS_FAILED => 'Pembayaran Gagal',
             self::STATUS_EXPIRED => 'Kedaluwarsa',
             self::STATUS_REFUNDED => 'Dikembalikan',
         ];
@@ -88,5 +92,15 @@ class Payment extends Model
         $labels = self::statusLabels();
 
         return $labels[$status] ?? strtoupper(str_replace('_', ' ', (string) $status));
+    }
+
+    public function isFinal(): bool
+    {
+        return in_array($this->payment_status, [
+            self::STATUS_PAID,
+            self::STATUS_FAILED,
+            self::STATUS_EXPIRED,
+            self::STATUS_REFUNDED,
+        ], true);
     }
 }

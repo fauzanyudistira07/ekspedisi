@@ -4,8 +4,8 @@
 <div class="container">
     <div class="cp-card mb-4">
         <div class="cp-card-header d-flex flex-wrap justify-content-between align-items-center" style="gap:10px;">
-            <h2 class="cp-section-title">Riwayat Pembayaran</h2>
-            <a href="{{ route('customer.payments.create') }}" class="btn btn-primary">+ Buat Payment</a>
+            <h2 class="cp-section-title">Riwayat Pembayaran Midtrans</h2>
+            <a href="{{ route('customer.payments.create') }}" class="btn btn-primary">+ Buat Checkout</a>
         </div>
         <div class="cp-card-body">
             <form method="GET" action="{{ route('customer.payments.index') }}" class="cp-form">
@@ -36,11 +36,11 @@
                         <tr>
                             <th>Resi</th>
                             <th>Nominal</th>
-                            <th>Metode</th>
-                            <th>Reference</th>
+                            <th>Gateway</th>
+                            <th>Channel</th>
+                            <th>Order ID</th>
                             <th>Status</th>
-                            <th>Tanggal</th>
-                            <th>Kedaluwarsa</th>
+                            <th>Paid At</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -48,14 +48,17 @@
                         @forelse ($payments as $payment)
                             <tr>
                                 <td>{{ $payment->shipment->tracking_number ?? '-' }}</td>
-                                <td>Rp {{ number_format($payment->amount, 0, ',', '.') }}</td>
-                                <td>{{ strtoupper($payment->payment_method) }}</td>
-                                <td>{{ $payment->reference_number ?: '-' }}</td>
+                                <td>Rp {{ number_format((float) $payment->amount, 0, ',', '.') }}</td>
+                                <td>{{ strtoupper($payment->gateway_provider ?? 'midtrans') }}</td>
+                                <td>{{ strtoupper($payment->payment_channel ?? '-') }}</td>
+                                <td>{{ $payment->gateway_order_id ?: '-' }}</td>
                                 <td><span class="cp-badge {{ $payment->payment_status }}">{{ \App\Models\Payment::statusLabel($payment->payment_status) }}</span></td>
-                                <td>{{ $payment->payment_date?->format('d M Y') }}</td>
-                                <td>{{ $payment->expired_at?->format('d M Y H:i') ?: '-' }}</td>
+                                <td>{{ $payment->paid_at?->format('d M Y H:i') ?: '-' }}</td>
                                 <td class="text-right">
-                                    <a href="{{ route('customer.payments.invoice', $payment) }}" class="btn btn-sm btn-outline-primary">Invoice PDF</a>
+                                    @if ($payment->payment_status === \App\Models\Payment::STATUS_PENDING && $payment->snap_token)
+                                        <a href="{{ route('customer.payments.checkout', $payment) }}" class="btn btn-sm btn-outline-primary">Lanjut Bayar</a>
+                                    @endif
+                                    <a href="{{ route('customer.payments.invoice', $payment) }}" class="btn btn-sm btn-outline-secondary">Invoice PDF</a>
                                 </td>
                             </tr>
                         @empty
@@ -73,22 +76,18 @@
                 <div class="d-flex justify-content-between align-items-start mb-2" style="gap:10px;">
                     <div>
                         <div class="font-weight-bold">{{ $payment->shipment->tracking_number ?? '-' }}</div>
-                        <div class="cp-muted-small">{{ $payment->payment_date?->format('d M Y') }}</div>
+                        <div class="cp-muted-small">{{ $payment->gateway_order_id ?: '-' }}</div>
                     </div>
                     <span class="cp-badge {{ $payment->payment_status }}">{{ \App\Models\Payment::statusLabel($payment->payment_status) }}</span>
                 </div>
-                <div class="cp-mobile-kv"><span>Nominal</span><strong>Rp {{ number_format($payment->amount, 0, ',', '.') }}</strong></div>
-                <div class="cp-mobile-kv"><span>Metode</span><strong>{{ strtoupper($payment->payment_method) }}</strong></div>
-                <div class="cp-mobile-kv"><span>Reference</span><strong>{{ $payment->reference_number ?: '-' }}</strong></div>
-                <div class="cp-mobile-kv"><span>Kedaluwarsa</span><strong>{{ $payment->expired_at?->format('d M Y H:i') ?: '-' }}</strong></div>
-                <div class="cp-mobile-kv"><span>Bukti</span>
-                    @if ($payment->proof_file)
-                        <a href="{{ asset('uploads/payments/' . $payment->proof_file) }}" target="_blank" class="btn btn-sm btn-outline-info py-0 px-2">Lihat</a>
-                    @else
-                        <strong>-</strong>
-                    @endif
-                </div>
-                <a href="{{ route('customer.payments.invoice', $payment) }}" class="btn btn-sm btn-outline-primary btn-block mt-2">Invoice PDF</a>
+                <div class="cp-mobile-kv"><span>Nominal</span><strong>Rp {{ number_format((float) $payment->amount, 0, ',', '.') }}</strong></div>
+                <div class="cp-mobile-kv"><span>Gateway</span><strong>{{ strtoupper($payment->gateway_provider ?? 'midtrans') }}</strong></div>
+                <div class="cp-mobile-kv"><span>Channel</span><strong>{{ strtoupper($payment->payment_channel ?? '-') }}</strong></div>
+                <div class="cp-mobile-kv"><span>Paid At</span><strong>{{ $payment->paid_at?->format('d M Y H:i') ?: '-' }}</strong></div>
+                @if ($payment->payment_status === \App\Models\Payment::STATUS_PENDING && $payment->snap_token)
+                    <a href="{{ route('customer.payments.checkout', $payment) }}" class="btn btn-sm btn-outline-primary btn-block mt-2">Lanjut Bayar</a>
+                @endif
+                <a href="{{ route('customer.payments.invoice', $payment) }}" class="btn btn-sm btn-outline-secondary btn-block mt-2">Invoice PDF</a>
             </div>
         @empty
             <div class="cp-card">

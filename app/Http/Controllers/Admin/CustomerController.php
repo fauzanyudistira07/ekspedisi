@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Concerns\AuthorizesRoleTableAccess;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
+use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
@@ -80,9 +81,7 @@ class CustomerController extends Controller
         }
 
         if ($request->hasFile('photo')) {
-            $photoName = time() . '_' . $request->file('photo')->getClientOriginalName();
-            $request->file('photo')->move(public_path('uploads/customers'), $photoName);
-            $validated['photo'] = $photoName;
+            $validated['photo'] = Uploads::storePublic($request->file('photo'), 'customers');
         }
 
         $customer->update($validated);

@@ -49,6 +49,12 @@
                             </div>
                             <div>{{ $tracking->location }}</div>
                             <div class="cp-muted-small">{{ $tracking->description ?: 'Update status pengiriman.' }}</div>
+                            @if ($tracking->received_by)
+                                <div class="cp-muted-small">Diterima oleh: <strong>{{ $tracking->received_by }}</strong>{{ $tracking->receiver_relation ? ' (' . $tracking->receiver_relation . ')' : '' }}</div>
+                            @endif
+                            @if ($tracking->proof_photo)
+                                <a href="{{ asset('uploads/shipment-trackings/' . $tracking->proof_photo) }}" target="_blank" class="btn btn-sm btn-outline-info mt-2">Lihat Bukti Serah Terima</a>
+                            @endif
                         </li>
                     @empty
                         <li>

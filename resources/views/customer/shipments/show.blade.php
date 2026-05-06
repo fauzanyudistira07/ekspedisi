@@ -81,6 +81,12 @@
                                 </div>
                                 <div>{{ $tracking->location }}</div>
                                 <div class="cp-muted-small">{{ $tracking->description ?: 'Update status pengiriman.' }}</div>
+                                @if ($tracking->received_by)
+                                    <div class="cp-muted-small">Diterima oleh: <strong>{{ $tracking->received_by }}</strong>{{ $tracking->receiver_relation ? ' (' . $tracking->receiver_relation . ')' : '' }}</div>
+                                @endif
+                                @if ($tracking->proof_photo)
+                                    <a href="{{ asset('uploads/shipment-trackings/' . $tracking->proof_photo) }}" target="_blank" class="btn btn-sm btn-outline-info mt-2">Lihat Bukti Serah Terima</a>
+                                @endif
                             </li>
                         @empty
                             <li>
@@ -102,19 +108,19 @@
                     <div class="col-md-9">
                         <div class="row">
                             <div class="col-md-3 mb-2"><span class="cp-muted-small d-block">Nominal</span><strong>Rp {{ number_format($shipment->payment->amount, 0, ',', '.') }}</strong></div>
-                            <div class="col-md-3 mb-2"><span class="cp-muted-small d-block">Metode</span><strong>{{ strtoupper($shipment->payment->payment_method) }}</strong></div>
+                            <div class="col-md-3 mb-2"><span class="cp-muted-small d-block">Gateway</span><strong>{{ strtoupper($shipment->payment->gateway_provider ?? $shipment->payment->payment_method) }}</strong></div>
                             <div class="col-md-3 mb-2"><span class="cp-muted-small d-block">Status</span><span class="cp-badge {{ $shipment->payment->payment_status }}">{{ \App\Models\Payment::statusLabel($shipment->payment->payment_status) }}</span></div>
-                            <div class="col-md-3 mb-2"><span class="cp-muted-small d-block">Tanggal</span><strong>{{ $shipment->payment->payment_date?->format('d M Y') }}</strong></div>
-                            <div class="col-md-6 mb-2"><span class="cp-muted-small d-block">Reference</span><strong>{{ $shipment->payment->reference_number ?: '-' }}</strong></div>
-                            <div class="col-md-6 mb-2"><span class="cp-muted-small d-block">Kedaluwarsa</span><strong>{{ $shipment->payment->expired_at?->format('d M Y H:i') ?: '-' }}</strong></div>
+                            <div class="col-md-3 mb-2"><span class="cp-muted-small d-block">Paid At</span><strong>{{ $shipment->payment->paid_at?->format('d M Y H:i') ?: '-' }}</strong></div>
+                            <div class="col-md-6 mb-2"><span class="cp-muted-small d-block">Order ID</span><strong>{{ $shipment->payment->gateway_order_id ?: '-' }}</strong></div>
+                            <div class="col-md-6 mb-2"><span class="cp-muted-small d-block">Channel</span><strong>{{ strtoupper($shipment->payment->payment_channel ?? '-') }}</strong></div>
                         </div>
                     </div>
                     <div class="col-md-3 text-md-right mt-2 mt-md-0">
                         @if ($shipment->sender_id === Auth::guard('customer')->id())
-                            <a href="{{ route('customer.payments.invoice', $shipment->payment) }}" class="btn btn-outline-primary btn-sm">Invoice PDF</a>
-                            @if ($shipment->payment->proof_file)
-                                <a href="{{ asset('uploads/payments/' . $shipment->payment->proof_file) }}" target="_blank" class="btn btn-outline-info btn-sm mt-2">Lihat Bukti</a>
+                            @if ($shipment->payment->payment_status === \App\Models\Payment::STATUS_PENDING && $shipment->payment->snap_token)
+                                <a href="{{ route('customer.payments.checkout', $shipment->payment) }}" class="btn btn-outline-primary btn-sm">Lanjut Bayar</a>
                             @endif
+                            <a href="{{ route('customer.payments.invoice', $shipment->payment) }}" class="btn btn-outline-primary btn-sm">Invoice PDF</a>
                         @endif
                     </div>
                 </div>

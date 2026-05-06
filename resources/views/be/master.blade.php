@@ -15,44 +15,100 @@
     <link href="{{ asset('assets/css/customer-portal.css') }}" rel="stylesheet">
     <link href="{{ asset('assets/css/internal-customer-theme.css') }}" rel="stylesheet">
 </head>
-<body class="customer-portal">
+<body class="customer-portal role-{{ Auth::user()->role ?? 'guest' }}">
     @php
         $role = Auth::user()->role ?? null;
-        $menus = collect(config('admin_sidebar', []))->filter(fn ($menu) => in_array($role, $menu['roles'], true));
+        $menus = collect(config('admin_sidebar', []))
+            ->filter(fn ($menu) => in_array($role, $menu['roles'], true))
+            ->groupBy(fn ($menu) => $menu['group'] ?? 'Menu');
+        $portalLabel = match ($role) {
+            'courier' => 'Workspace Kurir',
+            'cashier' => 'Desk Keuangan',
+            'manager' => 'Control Tower Manager',
+            default => 'Portal Internal Ekspedisi Online',
+        };
+        $footerLinks = match ($role) {
+            'courier' => [
+                ['label' => 'Dashboard', 'route' => route('dashboard.index')],
+                ['label' => 'Task Saya', 'route' => route('courier.tasks')],
+                ['label' => 'Tracking', 'route' => route('shipment-trackings.index')],
+            ],
+            'cashier' => [
+                ['label' => 'Dashboard', 'route' => route('dashboard.index')],
+                ['label' => 'Payments', 'route' => route('payments.index')],
+                ['label' => 'Shipment', 'route' => route('shipments.index')],
+            ],
+            default => [
+                ['label' => 'Dashboard', 'route' => route('dashboard.index')],
+                ['label' => 'Shipment', 'route' => route('shipments.index')],
+                ['label' => 'Payment', 'route' => route('payments.index')],
+            ],
+        };
     @endphp
 
     <div class="cp-topbar">
         <div class="container d-flex justify-content-between align-items-center">
-            <span><i class="fa fa-briefcase mr-2"></i>Portal Internal Ekspedisi Online</span>
-            <span class="d-none d-md-inline"><i class="fa fa-user-shield mr-2"></i>Role: {{ strtoupper($role ?? '-') }}</span>
+            <span><i class="fa fa-briefcase mr-2"></i>{{ $portalLabel }}</span>
+            <div class="d-flex align-items-center" style="gap:12px;">
+                <span class="d-none d-md-inline cp-topbar-pill"><i class="fa fa-wallet mr-2"></i>Midtrans {{ config('services.midtrans.is_production') ? 'Production' : 'Sandbox' }}</span>
+                <span class="d-none d-md-inline"><i class="fa fa-user-shield mr-2"></i>Role: {{ strtoupper($role ?? '-') }}</span>
+            </div>
         </div>
     </div>
 
     <div class="cp-admin-shell">
         <aside class="cp-sidebar">
-            <a href="{{ route('dashboard.index') }}" class="cp-sidebar-brand">
-                <i class="fa fa-shipping-fast mr-2"></i>Ekspedisi Internal
-            </a>
-
-            <div class="cp-sidebar-role">Role: {{ strtoupper($role ?? '-') }}</div>
-
-            <nav class="cp-sidebar-menu">
-                @foreach ($menus as $menu)
-                    <a href="{{ route($menu['route']) }}" class="cp-side-link {{ request()->routeIs($menu['route']) ? 'active' : '' }}">
-                        @if (!empty($menu['icon']))
-                            <i class="{{ $menu['icon'] }}"></i>
-                        @endif
-                        <span>{{ $menu['label'] }}</span>
+            <div class="cp-sidebar-inner">
+                <div>
+                    <a href="{{ route('dashboard.index') }}" class="cp-sidebar-brand">
+                        <i class="fa {{ $role === 'courier' ? 'fa-route' : 'fa-shipping-fast' }} mr-2"></i>{{ $role === 'courier' ? 'Courier Workspace' : 'Ekspedisi Internal' }}
                     </a>
-                @endforeach
-            </nav>
+
+                    <div class="cp-sidebar-role">
+                        <div class="cp-sidebar-role-label">Role Aktif</div>
+                        <div class="cp-sidebar-role-value">{{ strtoupper($role ?? '-') }}</div>
+                    </div>
+
+                    <nav class="cp-sidebar-menu">
+                        @foreach ($menus as $group => $items)
+                            <div class="cp-nav-group">
+                                <div class="cp-nav-group-title">{{ $group }}</div>
+                                @foreach ($items as $menu)
+                                    <a href="{{ route($menu['route']) }}" class="cp-side-link {{ request()->routeIs($menu['route']) || request()->routeIs($menu['route'] . '.*') ? 'active' : '' }}">
+                                        @if (!empty($menu['icon']))
+                                            <i class="{{ $menu['icon'] }}"></i>
+                                        @endif
+                                        <span>{{ $menu['label'] }}</span>
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endforeach
+                    </nav>
+                </div>
+
+                <div class="cp-sidebar-footer">
+                    <div class="cp-sidebar-footer-title">{{ $role === 'courier' ? 'Mode Kerja' : 'Portal Status' }}</div>
+                    <div class="cp-sidebar-footer-copy">
+                        {{ $role === 'courier'
+                            ? 'Fokus pada assignment, update lokasi, dan bukti serah terima.'
+                            : 'Kelola operasional, data, dan monitoring sesuai hak akses role.' }}
+                    </div>
+                </div>
+            </div>
         </aside>
 
         <div class="cp-admin-content">
             <div class="cp-admin-header">
-                <h1 class="cp-admin-title mb-0">{{ $title ?? 'Dashboard' }}</h1>
+                <div>
+                    <div class="cp-admin-eyebrow">Operasional Internal</div>
+                    <h1 class="cp-admin-title mb-0">{{ $title ?? 'Dashboard' }}</h1>
+                </div>
 
                 <div class="cp-desktop-user d-flex align-items-center" style="gap:10px;">
+                    <div class="cp-header-meta">
+                        <div class="cp-header-meta-label">Hari ini</div>
+                        <div class="cp-header-meta-value">{{ now()->translatedFormat('d M Y') }}</div>
+                    </div>
                     <div class="dropdown">
                         <button class="cp-profile-btn dropdown-toggle" data-toggle="dropdown" type="button">
                             <img src="{{ asset('assets/images/user.jpg') }}" alt="Profile">
@@ -78,9 +134,9 @@
                 <div class="container d-flex flex-column flex-md-row justify-content-between align-items-md-center">
                     <p class="mb-2 mb-md-0 cp-muted-small">&copy; {{ date('Y') }} Ekspedisi Online Internal. Operasional real-time per role.</p>
                     <div class="cp-muted-small">
-                        <a href="{{ route('dashboard.index') }}" class="mr-3">Dashboard</a>
-                        <a href="{{ route('shipments.index') }}" class="mr-3">Shipment</a>
-                        <a href="{{ route('payments.index') }}">Payment</a>
+                        @foreach ($footerLinks as $link)
+                            <a href="{{ $link['route'] }}" class="{{ !$loop->last ? 'mr-3' : '' }}">{{ $link['label'] }}</a>
+                        @endforeach
                     </div>
                 </div>
             </footer>

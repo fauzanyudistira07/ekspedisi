@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\AuthorizesRoleTableAccess;
 use App\Http\Controllers\Controller;
 use App\Models\Shipment;
 use App\Models\ShipmentItem;
+use App\Support\Uploads;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -60,12 +61,11 @@ class ShipmentItemController extends Controller
         $this->ensureShipmentVisibility($shipment);
 
         if ($request->hasFile('photo')) {
-            $photoName = time() . '_' . $request->file('photo')->getClientOriginalName();
-            $request->file('photo')->move(public_path('uploads/shipment-items'), $photoName);
-            $validated['photo'] = $photoName;
+            $validated['photo'] = Uploads::storePublic($request->file('photo'), 'shipment-items');
         }
 
         ShipmentItem::create($validated);
+        $this->syncShipmentTotals($shipment);
 
         return redirect()->route('shipment-items.index')->with('success', 'Shipment item berhasil ditambahkan.');
     }
@@ -85,6 +85,7 @@ class ShipmentItemController extends Controller
     public function update(Request $request, ShipmentItem $shipmentItem)
     {
         $this->ensureTablePermission('shipment_items', 'update');
+        $originalShipment = $shipmentItem->shipment;
 
         $validated = $request->validate([
             'shipment_id' => 'required|exists:shipments,id',
@@ -98,12 +99,14 @@ class ShipmentItemController extends Controller
         $this->ensureShipmentVisibility($shipment);
 
         if ($request->hasFile('photo')) {
-            $photoName = time() . '_' . $request->file('photo')->getClientOriginalName();
-            $request->file('photo')->move(public_path('uploads/shipment-items'), $photoName);
-            $validated['photo'] = $photoName;
+            $validated['photo'] = Uploads::storePublic($request->file('photo'), 'shipment-items');
         }
 
         $shipmentItem->update($validated);
+        if ($originalShipment->id !== $shipment->id) {
+            $this->syncShipmentTotals($originalShipment->fresh(['rate', 'items']));
+        }
+        $this->syncShipmentTotals($shipment);
 
         return redirect()->route('shipment-items.index')->with('success', 'Shipment item berhasil diperbarui.');
     }
@@ -113,7 +116,9 @@ class ShipmentItemController extends Controller
         $this->ensureTablePermission('shipment_items', 'delete');
         $this->ensureShipmentVisibility($shipmentItem->shipment);
 
+        $shipment = $shipmentItem->shipment;
         $shipmentItem->delete();
+        $this->syncShipmentTotals($shipment);
 
         return redirect()->route('shipment-items.index')->with('success', 'Shipment item berhasil dihapus.');
     }
@@ -134,5 +139,19 @@ class ShipmentItemController extends Controller
         if ($user && $user->role === User::ROLE_COURIER && $shipment->courier_id !== $user->id) {
             abort(403, 'Anda tidak memiliki akses ke shipment ini.');
         }
+    }
+
+    private function syncShipmentTotals(Shipment $shipment): void
+    {
+        $shipment->loadMissing('rate', 'items');
+
+        $totalWeight = $shipment->items->sum(function (ShipmentItem $item) {
+            return (float) $item->weight * (int) $item->quantity;
+        });
+
+        $shipment->update([
+            'total_weight' => round($totalWeight, 2),
+            'total_price' => round($totalWeight * (float) $shipment->rate->price_per_kg, 2),
+        ]);
     }
 }

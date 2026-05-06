@@ -27,6 +27,7 @@
         <tr><td><strong>Customer</strong></td><td>{{ $customer->name }}</td><td><strong>Status Pembayaran</strong></td><td><span class="badge">{{ strtoupper($payment->payment_status) }}</span></td></tr>
         <tr><td><strong>Pengirim</strong></td><td>{{ $shipment->sender->name ?? '-' }}</td><td><strong>Penerima</strong></td><td>{{ $shipment->receiver->name ?? '-' }}</td></tr>
         <tr><td><strong>Asal</strong></td><td>{{ $shipment->originBranch->name ?? '-' }} ({{ $shipment->originBranch->city ?? '-' }})</td><td><strong>Tujuan</strong></td><td>{{ $shipment->destinationBranch->name ?? '-' }} ({{ $shipment->destinationBranch->city ?? '-' }})</td></tr>
+        <tr><td><strong>Gateway</strong></td><td>{{ strtoupper($payment->gateway_provider ?? $payment->payment_method) }}</td><td><strong>Order ID</strong></td><td>{{ $payment->gateway_order_id ?? '-' }}</td></tr>
     </table>
 
     <div class="section">
@@ -57,8 +58,8 @@
         <strong>Rincian Pembayaran</strong>
         <table>
             <tr><th>Total Berat</th><td>{{ number_format($shipment->total_weight, 2) }} kg</td></tr>
-            <tr><th>Metode Pembayaran</th><td>{{ strtoupper($payment->payment_method) }}</td></tr>
-            <tr><th>Tanggal Pembayaran</th><td>{{ $payment->payment_date?->format('d M Y') }}</td></tr>
+            <tr><th>Metode Pembayaran</th><td>{{ strtoupper($payment->payment_channel ?? $payment->payment_method) }}</td></tr>
+            <tr><th>Tanggal Pembayaran</th><td>{{ $payment->paid_at?->format('d M Y H:i') ?: '-' }}</td></tr>
             <tr><th>Total Bayar</th><td><strong>Rp {{ number_format($payment->amount, 0, ',', '.') }}</strong></td></tr>
         </table>
     </div>

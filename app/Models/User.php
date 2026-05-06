@@ -51,6 +51,11 @@ class User extends Authenticatable
         return $this->hasMany(Shipment::class, 'courier_id');
     }
 
+    public function manifests()
+    {
+        return $this->hasMany(ShipmentManifest::class, 'courier_id');
+    }
+
     public static function internalRoles(): array
     {
         return [

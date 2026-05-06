@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Shipment;
 use App\Models\ShipmentTracking;
+use App\Support\Uploads;
+use App\Support\AuditLogger;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 
 class CourierTaskController extends Controller
@@ -80,6 +83,9 @@ class CourierTaskController extends Controller
             'status' => ['required', Rule::in(ShipmentTracking::statuses())],
             'location' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',
+            'received_by' => 'nullable|string|max:100',
+            'receiver_relation' => 'nullable|string|max:50',
+            'proof_photo' => 'nullable|image|mimes:jpg,jpeg,png|max:3072',
             'tracked_at' => 'nullable|date',
         ]);
 
@@ -90,17 +96,42 @@ class CourierTaskController extends Controller
             ]);
         }
 
+        $this->applyDeliveryProofValidation($request, $validated);
+
+        if ($request->hasFile('proof_photo')) {
+            $validated['proof_photo'] = Uploads::storePublic($request->file('proof_photo'), 'shipment-trackings', 'proof');
+        }
+
         ShipmentTracking::create([
             'shipment_id' => $shipment->id,
             'location' => $validated['location'],
             'description' => $validated['description'] ?? 'Update dari dashboard courier.',
+            'checkpoint_type' => 'courier_update',
+            'received_by' => $validated['received_by'] ?? null,
+            'receiver_relation' => $validated['receiver_relation'] ?? null,
+            'proof_photo' => $validated['proof_photo'] ?? null,
             'status' => $validated['status'],
             'tracked_at' => $validated['tracked_at'] ?? now(),
         ]);
 
         $shipment->update([
             'status' => $validated['status'],
+            'exception_code' => $this->isExceptionStatus($validated['status']) ? $validated['status'] : null,
+            'exception_notes' => $this->isExceptionStatus($validated['status']) ? ($validated['description'] ?? null) : null,
+            'last_exception_at' => $this->isExceptionStatus($validated['status']) ? now() : $shipment->last_exception_at,
         ]);
+
+        AuditLogger::log(
+            $shipment,
+            'courier.status_updated',
+            'Kurir memperbarui shipment ' . $shipment->tracking_number . ' ke status ' . ShipmentTracking::statusLabel($validated['status']) . '.',
+            null,
+            [
+                'status' => $validated['status'],
+                'location' => $validated['location'],
+                'description' => $validated['description'] ?? null,
+            ],
+        );
 
         return back()->with('success', 'Status shipment berhasil diperbarui.');
     }
@@ -121,5 +152,34 @@ class CourierTaskController extends Controller
         if ($user->role === User::ROLE_COURIER && $shipment->courier_id !== $user->id) {
             abort(403, 'Anda tidak memiliki akses ke shipment ini.');
         }
+    }
+
+    private function applyDeliveryProofValidation(Request $request, array &$validated): void
+    {
+        if ($validated['status'] !== ShipmentTracking::STATUS_DELIVERED) {
+            $validated['received_by'] = null;
+            $validated['receiver_relation'] = null;
+            return;
+        }
+
+        validator($request->all(), [
+            'received_by' => 'required|string|max:100',
+            'receiver_relation' => 'nullable|string|max:50',
+        ])->validate();
+
+        if (!$request->hasFile('proof_photo')) {
+            throw ValidationException::withMessages([
+                'proof_photo' => 'Foto bukti serah terima wajib diunggah saat paket delivered.',
+            ]);
+        }
+    }
+
+    private function isExceptionStatus(string $status): bool
+    {
+        return in_array($status, [
+            ShipmentTracking::STATUS_FAILED_DELIVERY,
+            ShipmentTracking::STATUS_EXCEPTION_HOLD,
+            ShipmentTracking::STATUS_RETURNED_TO_SENDER,
+        ], true);
     }
 }

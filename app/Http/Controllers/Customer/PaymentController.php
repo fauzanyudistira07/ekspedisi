@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Customer;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Shipment;
+use App\Services\MidtransService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -13,6 +16,10 @@ use Symfony\Component\HttpFoundation\Response;
 
 class PaymentController extends Controller
 {
+    public function __construct(private readonly MidtransService $midtrans)
+    {
+    }
+
     public function index()
     {
         $customerId = Auth::guard('customer')->id();
@@ -33,6 +40,14 @@ class PaymentController extends Controller
             ->paginate(10)
             ->withQueryString();
 
+        $payments->getCollection()->transform(function (Payment $payment) {
+            if (!$payment->isFinal() || $payment->payment_status === Payment::STATUS_PENDING) {
+                return $this->midtrans->refreshPaymentStatus($payment);
+            }
+
+            return $payment;
+        });
+
         return view('customer.payments.index', [
             'title' => 'My Payments',
             'payments' => $payments,
@@ -47,6 +62,12 @@ class PaymentController extends Controller
     public function create()
     {
         $customerId = Auth::guard('customer')->id();
+
+        Payment::with('shipment')
+            ->where('payment_status', Payment::STATUS_PENDING)
+            ->whereHas('shipment', fn ($query) => $query->where('sender_id', $customerId))
+            ->get()
+            ->each(fn (Payment $payment) => $this->midtrans->refreshPaymentStatus($payment));
 
         $shipments = Shipment::with('payment')
             ->where('sender_id', $customerId)
@@ -64,13 +85,12 @@ class PaymentController extends Controller
             ->get();
 
         return view('customer.payments.create', [
-            'title' => 'Create Payment',
+            'title' => 'Bayar Dengan Midtrans',
             'shipments' => $shipments,
-            'methods' => Payment::methods(),
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
         $customerId = Auth::guard('customer')->id();
 
@@ -80,64 +100,104 @@ class PaymentController extends Controller
                 'exists:shipments,id',
                 Rule::exists('shipments', 'id')->where(fn ($query) => $query->where('sender_id', $customerId)),
             ],
-            'payment_method' => ['required', Rule::in(Payment::methods())],
-            'payment_date' => 'required|date',
-            'reference_number' => 'nullable|string|max:120',
-            'proof_file' => 'nullable|image|mimes:jpg,jpeg,png|max:3072',
-            'notes' => 'nullable|string|max:1000',
         ]);
 
-        $shipment = Shipment::where('sender_id', $customerId)->findOrFail($validated['shipment_id']);
-
+        $shipment = Shipment::with(['sender', 'receiver'])->where('sender_id', $customerId)->findOrFail($validated['shipment_id']);
         $latestPayment = Payment::where('shipment_id', $shipment->id)->latest()->first();
+
+        if ($latestPayment && $latestPayment->payment_status === Payment::STATUS_PENDING) {
+            $latestPayment = $this->midtrans->refreshPaymentStatus($latestPayment);
+        }
 
         if ($latestPayment && !in_array($latestPayment->payment_status, [
             Payment::STATUS_FAILED,
             Payment::STATUS_EXPIRED,
             Payment::STATUS_REFUNDED,
         ], true)) {
-            return back()->withErrors(['shipment_id' => 'Shipment ini sudah memiliki pembayaran.'])->withInput();
+            if (empty($latestPayment->snap_token) || empty($latestPayment->snap_redirect_url)) {
+                $this->prepareSnapTransaction($latestPayment, $shipment);
+            }
+
+            return redirect()->route('customer.payments.checkout', $latestPayment);
         }
 
-        $paymentStatus = $validated['payment_method'] === Payment::METHOD_CASH
-            ? Payment::STATUS_PENDING
-            : Payment::STATUS_WAITING_VERIFICATION;
-
-        $proofFile = null;
-        if ($request->hasFile('proof_file')) {
-            $proofFile = time() . '_proof_' . $request->file('proof_file')->getClientOriginalName();
-            $request->file('proof_file')->move(public_path('uploads/payments'), $proofFile);
-        }
-
-        if ($validated['payment_method'] !== Payment::METHOD_CASH && empty($proofFile)) {
-            return back()->withErrors(['proof_file' => 'Bukti pembayaran wajib diunggah untuk transfer/e-wallet.'])->withInput();
-        }
-
-        $payload = [
+        $payment = $latestPayment ?? new Payment();
+        $payment->fill([
             'shipment_id' => $shipment->id,
             'amount' => $shipment->total_price,
-            'payment_method' => $validated['payment_method'],
-            'reference_number' => $validated['reference_number'] ?? null,
-            'proof_file' => $proofFile,
-            'payment_status' => $paymentStatus,
-            'payment_date' => $validated['payment_date'],
-            'expired_at' => now()->addDay(),
+            'gateway_provider' => 'midtrans',
+            'gateway_order_id' => $this->midtrans->generateGatewayOrderId($shipment),
+            'payment_method' => Payment::METHOD_MIDTRANS,
+            'payment_channel' => null,
+            'reference_number' => null,
+            'proof_file' => null,
+            'payment_status' => Payment::STATUS_PENDING,
+            'midtrans_transaction_status' => 'pending',
+            'payment_date' => null,
+            'paid_at' => null,
             'verified_at' => null,
+            'expired_at' => now()->addDay(),
             'verified_by' => null,
-            'notes' => $validated['notes'] ?? null,
-        ];
+            'notes' => 'Checkout via Midtrans',
+            'gateway_payload' => null,
+        ]);
+        $payment->save();
 
-        if ($latestPayment && in_array($latestPayment->payment_status, [
-            Payment::STATUS_FAILED,
-            Payment::STATUS_EXPIRED,
-            Payment::STATUS_REFUNDED,
-        ], true)) {
-            $latestPayment->update($payload);
-        } else {
-            Payment::create($payload);
+        $this->prepareSnapTransaction($payment, $shipment);
+
+        return redirect()->route('customer.payments.checkout', $payment);
+    }
+
+    public function checkout(Payment $customerPayment)
+    {
+        $payment = $this->ensurePaymentOwnership($customerPayment);
+        $payment = $this->midtrans->refreshPaymentStatus($payment);
+
+        if ($payment->payment_status === Payment::STATUS_PAID) {
+            return redirect()->route('customer.payments.index')
+                ->with('success', 'Pembayaran sudah berhasil dikonfirmasi oleh Midtrans.');
         }
 
-        return redirect()->route('customer.payments.index')->with('success', 'Payment berhasil dibuat. Silakan pantau status verifikasi pada menu payment.');
+        if (empty($payment->snap_token) || empty($payment->snap_redirect_url)) {
+            $this->prepareSnapTransaction($payment, $payment->shipment);
+            $payment->refresh();
+        }
+
+        return view('customer.payments.checkout', [
+            'title' => 'Checkout Midtrans',
+            'payment' => $payment->load('shipment'),
+            'midtransClientKey' => config('services.midtrans.client_key'),
+            'midtransSnapUrl' => config('services.midtrans.is_production')
+                ? 'https://app.midtrans.com/snap/snap.js'
+                : 'https://app.sandbox.midtrans.com/snap/snap.js',
+        ]);
+    }
+
+    public function result(Payment $customerPayment): RedirectResponse
+    {
+        $payment = $this->ensurePaymentOwnership($customerPayment);
+        $payment = $this->midtrans->refreshPaymentStatus($payment);
+
+        $message = match ($payment->payment_status) {
+            Payment::STATUS_PAID => 'Pembayaran berhasil dikonfirmasi.',
+            Payment::STATUS_PENDING => 'Pembayaran masih menunggu penyelesaian di Midtrans.',
+            Payment::STATUS_EXPIRED => 'Transaksi Midtrans sudah kedaluwarsa. Silakan buat pembayaran baru.',
+            Payment::STATUS_FAILED => 'Pembayaran gagal atau dibatalkan.',
+            default => 'Status pembayaran telah diperbarui.',
+        };
+
+        return redirect()->route('customer.payments.index')->with('success', $message);
+    }
+
+    public function notification(): JsonResponse
+    {
+        $payment = $this->midtrans->handleNotification();
+
+        return response()->json([
+            'message' => 'Notification processed',
+            'payment_id' => $payment->id,
+            'status' => $payment->payment_status,
+        ]);
     }
 
     public function invoice(Payment $customerPayment): Response
@@ -158,5 +218,37 @@ class PaymentController extends Controller
         ])->setPaper('a4');
 
         return $pdf->download('invoice-' . $payment->shipment->tracking_number . '.pdf');
+    }
+
+    private function ensurePaymentOwnership(Payment $payment): Payment
+    {
+        $customerId = Auth::guard('customer')->id();
+        $payment->loadMissing('shipment');
+
+        if ($payment->shipment->sender_id !== $customerId) {
+            abort(403, 'Anda tidak memiliki akses ke pembayaran ini.');
+        }
+
+        return $payment;
+    }
+
+    private function prepareSnapTransaction(Payment $payment, Shipment $shipment): void
+    {
+        $payment->loadMissing(['shipment.sender', 'shipment.receiver']);
+
+        if (empty($payment->gateway_order_id)) {
+            $payment->update([
+                'gateway_order_id' => $this->midtrans->generateGatewayOrderId($shipment),
+            ]);
+            $payment->refresh();
+        }
+
+        $snap = $this->midtrans->createOrRefreshSnapTransaction($payment);
+
+        $payment->update([
+            'snap_token' => $snap['token'],
+            'snap_redirect_url' => $snap['redirect_url'],
+            'gateway_payload' => $snap['payload'],
+        ]);
     }
 }

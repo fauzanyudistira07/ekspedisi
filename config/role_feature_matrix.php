@@ -47,10 +47,10 @@ return [
         'cashier' => [
             'label' => 'Cashier',
             'features' => [
-                'Verifikasi pesanan yang siap dibayar',
-                'Input dan validasi pembayaran cash/transfer/e-wallet',
-                'Cetak invoice dan bukti pembayaran',
-                'Rekonsiliasi transaksi harian',
+                'Monitoring transaksi Midtrans yang masih pending atau gagal',
+                'Audit invoice, nominal, dan status sinkronisasi pembayaran',
+                'Cetak invoice dan bukti transaksi customer',
+                'Rekonsiliasi transaksi harian berbasis status gateway',
             ],
             'tables' => [
                 'users' => ['read'],
